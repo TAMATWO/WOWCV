@@ -15,6 +15,9 @@ feature/form1-screen-template-detection
 feature/skill-json-form-editor
 以左側拉桿、輸入框及 Y／A 選單編輯 data／press／process 格式，右側按優先序升冪、權重降冪顯示技能卡片；支援 JSON／TXT 匯入儲存、新增按鍵組與技能、復原及重做。
 
+feature/raw-input-monitor
+透過 Raw Input 背景偵測鍵盤與滑鼠，表單顯示按鍵按下／放開、左右修飾鍵、滑鼠五鍵、雙向滾輪及移動資訊，保留最近 500 筆事件並支援清除；輸入接收採介面與實作分離，SendInput 僅定義介面。
+
 OpenCV 技術說明（依上述分支的實際用途）
 MSE（平均平方誤差）：將兩張同尺寸影像各像素、各通道的差值平方後取平均，數值越小表示像素越接近，0 代表完全相同。
 MSE 相似度換算：影像比較示範使用 1 − MSE／255² 並限制於 0～1，讓數值越大表示越接近，但它不是辨識正確率。
