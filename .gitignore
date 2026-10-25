@@ -9,3 +9,6 @@
 **/obj/
 /[Ss]kills_*/
 /[Ss]kills.json
+**/config.json
+**/config.json.bak
+**/config.json.tmp

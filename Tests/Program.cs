@@ -26,6 +26,8 @@ internal static class Program
             TestPipeline(root);
             TestRawInput();
             TestRoiSelection();
+            RoiViewportTests.Run(Check);
+            WorkbenchConfigurationTests.Run(root, Check);
             TestTabs(root);
             TestPixelResultsUi(root);
             Console.WriteLine($"PASS: {checks} checks. Artifacts: {root}");
@@ -190,7 +192,7 @@ internal static class Program
     }
     private static void TestTabs(string root)
     {
-        using var form = new Form1();
+        using var form = new Form1(Path.Combine(root, "tabs-config", "config.json"));
         // A transparent, offscreen host exercises real WinForms layout without a visible window.
         form.ShowInTaskbar = false; form.Opacity = 0;
         form.StartPosition = FormStartPosition.Manual; form.Location = new System.Drawing.Point(-30000, -30000);
@@ -236,15 +238,19 @@ internal static class Program
 
     private static void TestPixelResultsUi(string root)
     {
-        using var form = new Form1 { ShowInTaskbar = false, Opacity = 0, StartPosition = FormStartPosition.Manual,
+        string configPath = Path.Combine(root, "results-config", "config.json");
+        using (var store = new WorkbenchConfigurationStore(configPath))
+        {
+            store.QueueSave(new() { Source = new() { Kind = SourceKind.Image,
+                ImagePath = Path.Combine(root, "pixel-ui.png"), TemplateFolderPath = Path.Combine(root, "pixel-templates") } });
+            store.Flush();
+        }
+        using var form = new Form1(configPath) { ShowInTaskbar = false, Opacity = 0, StartPosition = FormStartPosition.Manual,
             Location = new System.Drawing.Point(-30000, -30000) };
         var detection = FindControls<DetectionControl>(form).Single();
-        var fields = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         // Feed only synthetic images to the UI so no desktop screenshots are stored in artifacts.
-        typeof(DetectionControl).GetField("imagePath", fields)!.SetValue(detection, Path.Combine(root, "pixel-ui.png"));
-        typeof(DetectionControl).GetField("templateFolder", fields)!.SetValue(detection, Path.Combine(root, "pixel-templates"));
-        typeof(DetectionControl).GetField("detecting", fields)!.SetValue(detection, true);
         form.Show();
+        FindControls<Button>(detection).Single(button => button.Text == "開始偵測").PerformClick();
         var table = FindControls<DataGridView>(detection).Single(grid => grid.Name == "DetectionResults");
         var details = FindControls<DataGridView>(detection).Single(grid => grid.Name == "PixelSampleDetails");
         WaitFor(() => table.Rows.Count == 2);
@@ -262,6 +268,40 @@ internal static class Program
             form.DrawToBitmap(image, new Rectangle(System.Drawing.Point.Empty, image.Size));
             image.Save(Path.Combine(root, "five-point-results.png"));
         }
+        var preview = FindControls<RoiPictureBox>(detection).Single();
+        var useRoi = FindControls<CheckBox>(detection).Single(control => control.Text == "僅偵測選取區");
+        var selectRoi = FindControls<Button>(detection).Single(control => control.Text == "框選偵測範圍");
+        var oldResult = (DetectionRow)table.Rows[0].Tag!;
+        selectRoi.PerformClick();
+        RoiViewportTests.Select(preview, new Rectangle(35, 25, 60, 60));
+        Check(useRoi.Checked && preview.Selection is not null && preview.DisplayedSourceBounds == preview.Selection,
+            "Selecting an ROI automatically focuses the main preview");
+        WaitFor(() => table.Rows.Count == 2 && table.Rows[0].Tag is DetectionRow { Found: true });
+        var focusedResult = (DetectionRow)table.Rows[0].Tag!;
+        Check(focusedResult.Bounds == oldResult.Bounds && focusedResult.X == oldResult.X && focusedResult.Y == oldResult.Y
+            && focusedResult.PixelVerification.Samples.SequenceEqual(oldResult.PixelVerification.Samples),
+            "ROI focus preserves detection coordinates and every expected/actual RGB sample");
+        using (var image = new Bitmap(form.Width, form.Height))
+        {
+            form.DrawToBitmap(image, new Rectangle(System.Drawing.Point.Empty, image.Size));
+            image.Save(Path.Combine(root, "roi-focus.png"));
+        }
+        var savedRoi = preview.Selection;
+        selectRoi.PerformClick();
+        Check(preview.SelectionEnabled && preview.DisplayedSourceBounds == new Rectangle(0, 0, 140, 120),
+            "Main ROI reselection temporarily returns to full preview");
+        selectRoi.PerformClick();
+        Check(!preview.SelectionEnabled && preview.DisplayedSourceBounds == savedRoi,
+            "Canceling main ROI reselection restores the saved focus");
+        useRoi.Checked = false;
+        Check(preview.DisplayedSourceBounds == new Rectangle(0, 0, 140, 120) && preview.Selection == savedRoi,
+            "Unchecking ROI restores full preview and keeps the selection");
+        useRoi.Checked = true;
+        Check(preview.DisplayedSourceBounds == savedRoi, "Rechecking ROI restores the selected focus");
+        FindControls<Button>(detection).Single(control => control.Text == "清除範圍").PerformClick();
+        Check(!useRoi.Checked && preview.Selection is null && preview.DisplayedSourceBounds == new Rectangle(0, 0, 140, 120),
+            "Clear ROI resets focus and the checkbox together");
+        WaitFor(() => table.Rows.Count == 2);
         var editor = FindControls<PixelVerificationControl>(detection).Single();
         editor.ApplyOptions(editor.GetOptions() with { Right = new(500, 0) });
         WaitFor(() => table.Rows.Count == 2 && table.Rows[0].Tag is DetectionRow { PixelVerification.Status: PixelCheckStatus.OutOfBounds });

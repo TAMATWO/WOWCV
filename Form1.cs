@@ -1,5 +1,6 @@
 using OpenCvSharp;
 using WOWCV.Controls;
+using WOWCV.Services;
 
 namespace WOWCV;
 
@@ -9,7 +10,9 @@ public partial class Form1 : Form
     private readonly SkillEditorControl editor;
     private bool servicesDisposed;
 
-    public Form1()
+    public Form1() : this(WorkbenchConfigurationStore.DefaultPath) { }
+
+    public Form1(string configurationPath)
     {
         InitializeComponent();
         Cv2.SetNumThreads(1);
@@ -17,7 +20,7 @@ public partial class Form1 : Form
         ClientSize = new System.Drawing.Size(1440, 900);
         MinimumSize = new System.Drawing.Size(1100, 740);
         var tabs = new TabControl { Dock = DockStyle.Fill };
-        detection = new DetectionControl();
+        detection = new DetectionControl(configurationPath);
         editor = new SkillEditorControl();
         AddPage("主頁 · 影像辨識", detection);
         AddPage("建立技能樣版", new SlicingControl());
@@ -38,7 +41,12 @@ public partial class Form1 : Form
     {
         if (!editor.ConfirmDiscard()) e.Cancel = true;
         base.OnFormClosing(e);
-        if (!e.Cancel) DisposeServices();
+        if (!e.Cancel)
+        {
+            string? error = detection.FlushConfiguration();
+            if (error is not null) MessageBox.Show(this, error, "配置未能保存", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            DisposeServices();
+        }
     }
 
     private void DisposeServices()
