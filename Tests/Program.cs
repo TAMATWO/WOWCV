@@ -30,6 +30,8 @@ internal static class Program
             WorkbenchConfigurationTests.Run(root, Check);
             TestTabs(root);
             TestPixelResultsUi(root);
+            SkillTrackingTests.Run(root, Check);
+            SkillCastingTests.Run(root, Check);
             Console.WriteLine($"PASS: {checks} checks. Artifacts: {root}");
             return 0;
         }

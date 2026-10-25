@@ -1,0 +1,79 @@
+using WOWCV.Models;
+using WOWCV.Services;
+
+namespace WOWCV.Controls;
+
+public sealed partial class DetectionControl
+{
+    private readonly SkillCastingService casting;
+    private readonly CheckBox castingEnabled = new() { Name = "CastingEnabled", Text = "啟用技能施放", AutoSize = true };
+    private readonly ComboBox triggerMode = new() { Name = "TriggerMode", DropDownStyle = ComboBoxStyle.DropDownList, Width = 145 };
+    private readonly NumericUpDown castInterval = new() { Name = "CastingInterval", Minimum = 0, Maximum = 60000, Value = 150, Width = 80 };
+    private readonly NumericUpDown keyHold = new() { Name = "CastingKeyHold", Minimum = 1, Maximum = 5000, Value = 30, Width = 70 };
+    private readonly Label castingStatus = new() { Name = "CastingStatus", Dock = DockStyle.Bottom, Height = 42, Text = "技能施放未啟用" };
+    private bool updatingCasting, inputReady;
+
+    private void InitializeCastingControls(TableLayoutPanel host)
+    {
+        triggerMode.Items.AddRange(["按住（後按生效）", "切換啟動／停止"]); triggerMode.SelectedIndex = 0;
+        var toolbar = new FlowLayoutPanel { Name = "CastingToolbar", Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(5) };
+        toolbar.Controls.AddRange([castingEnabled, triggerMode,
+            new Label { Text = "共用間隔 ms", AutoSize = true }, castInterval,
+            new Label { Text = "按鍵持續 ms", AutoSize = true }, keyHold]);
+        host.RowCount = 2; host.Controls.Add(toolbar, 0, 1);
+        castingEnabled.CheckedChanged += (_, _) =>
+        {
+            if (updatingCasting) return;
+            if (!castingEnabled.Checked) { casting.Disable(); RefreshCastingStatus(); return; }
+            try
+            {
+                if (!inputReady || latestInputError.Length > 0) throw new InvalidOperationException("Raw Input 尚未就緒，無法啟用施放。");
+                if (!detecting || imagePath is not null || !pixelSettings.GetOptions().Enabled)
+                    throw new InvalidOperationException("請使用螢幕來源、啟用五點驗證並開始偵測。");
+                var document = Configuration.Read() ?? throw new InvalidOperationException("請先匯入技能流程 TXT／JSON。");
+                var plan = SkillCastingPlan.Compile(document, Configuration.Bindings.Revision);
+                if (templateFolder is null || !Directory.Exists(templateFolder)
+                    || Configuration.Bindings.Items.Where(binding => binding.Issue is null)
+                        .Any(binding => !File.Exists(Path.Combine(templateFolder, binding.TemplateFile))))
+                    throw new InvalidOperationException("樣版圖片遺失，請先載入正確的樣版資料夾。");
+                casting.Enable(plan, GetCastingOptions(), version);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException)
+            { casting.Disable(ex.Message); }
+            RefreshCastingStatus();
+        };
+        triggerMode.SelectedIndexChanged += (_, _) => CastingOptionsChanged();
+        castInterval.ValueChanged += (_, _) => CastingOptionsChanged();
+        keyHold.ValueChanged += (_, _) => CastingOptionsChanged();
+    }
+
+    private CastingConfiguration GetCastingOptions() => new()
+    {
+        Mode = triggerMode.SelectedIndex == 1 ? TriggerMode.Toggle : TriggerMode.Hold,
+        MinimumIntervalMs = (int)castInterval.Value, KeyHoldMs = (int)keyHold.Value
+    };
+    private void RestoreCastingOptions()
+    {
+        triggerMode.SelectedIndex = appConfiguration.Casting.Mode == TriggerMode.Toggle ? 1 : 0;
+        castInterval.Value = appConfiguration.Casting.MinimumIntervalMs;
+        keyHold.Value = appConfiguration.Casting.KeyHoldMs;
+    }
+    private void CastingOptionsChanged()
+    {
+        if (applyingConfiguration || updatingCasting) return;
+        casting.Disable("施放設定已變更，請重新啟用技能施放"); RefreshCastingStatus(); QueueConfigurationSave();
+    }
+    private void PrepareCastingContext()
+    {
+        casting.ConfigureContext(version, detecting && imagePath is null && pixelSettings.GetOptions().Enabled);
+        RefreshCastingStatus();
+    }
+    private void RefreshCastingStatus()
+    {
+        var value = casting.Status;
+        updatingCasting = true;
+        try { castingEnabled.Checked = value.Enabled; }
+        finally { updatingCasting = false; }
+        castingStatus.Text = $"技能施放：{(value.Enabled ? "已啟用" : "已停用")} · 作用中流程：{value.ActivePress ?? "無"} · 最近施放：{value.LastSkill ?? "無"}\n{value.Reason}";
+    }
+}

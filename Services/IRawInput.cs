@@ -20,6 +20,7 @@ public sealed class KeyboardInputEventArgs : EventArgs
     public ushort ScanCode { get; init; }
     public ushort Flags { get; init; }
     public bool IsDown { get; init; }
+    public uint ExtraInformation { get; init; }
 }
 
 [Flags]

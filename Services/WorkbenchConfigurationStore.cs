@@ -11,7 +11,8 @@ public sealed class WorkbenchConfigurationStore : IDisposable
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
-        Converters = { new JsonStringEnumConverter<SourceKind>(JsonNamingPolicy.CamelCase, allowIntegerValues: false) }
+        Converters = { new JsonStringEnumConverter<SourceKind>(JsonNamingPolicy.CamelCase, allowIntegerValues: false),
+            new JsonStringEnumConverter<TriggerMode>(JsonNamingPolicy.CamelCase, allowIntegerValues: false) }
     };
     public static string DefaultPath => Path.Combine(AppContext.BaseDirectory, "config.json");
     public string FilePath { get; }

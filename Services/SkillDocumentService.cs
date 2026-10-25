@@ -22,8 +22,13 @@ public static string Serialize(SkillDocument document) => JsonSerializer.Seriali
         {
             if (binding is null || string.IsNullOrWhiteSpace(binding.Press) || binding.Process is null) throw new JsonException("每組資料需有非空白 press 與 process 陣列。");
             foreach (var skill in binding.Process)
-                if (skill is null || skill.SkillName is null || skill.CooldownCheck is null || skill.Status is not ("Y" or "A") || skill.CdSec < 0)
+            {
+                if (skill is null || skill.SkillName is null || skill.CooldownCheck is null || skill.TemplateFile is null || skill.CastKey is null
+                    || skill.Status is not ("Y" or "A") || skill.CdSec < 0)
                     throw new JsonException("技能文字不可為 null；status 必須為 Y 或 A；cd_sec 不可為負數。");
+                if (skill.TemplateFile.Length > 0 && (skill.TemplateFile.IndexOfAny(['/', '\\', ':']) >= 0 || skill.TemplateFile is "." or ".."))
+                    throw new JsonException("template_file 只保存樣版檔名，不可包含資料夾或完整路徑。");
+            }
         }
         return result;
     }

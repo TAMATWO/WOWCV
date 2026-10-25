@@ -22,6 +22,7 @@ public partial class Form1 : Form
         var tabs = new TabControl { Dock = DockStyle.Fill };
         detection = new DetectionControl(configurationPath);
         editor = new SkillEditorControl();
+        detection.TemplateFolderChanged += (_, _) => editor.SetTemplateFolder(detection.TemplateFolderPath);
         AddPage("主頁 · 影像辨識", detection);
         AddPage("建立技能樣版", new SlicingControl());
         AddPage("技能流程設定", editor);

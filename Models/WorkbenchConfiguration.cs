@@ -1,6 +1,21 @@
 namespace WOWCV.Models;
 
 public enum SourceKind { Screen, Image }
+public enum TriggerMode { Hold, Toggle }
+
+public sealed record CastingConfiguration
+{
+    public TriggerMode Mode { get; init; } = TriggerMode.Hold;
+    public int MinimumIntervalMs { get; init; } = 150;
+    public int KeyHoldMs { get; init; } = 30;
+
+    public void Validate()
+    {
+        if (!Enum.IsDefined(Mode)) throw new ArgumentException("無效的技能觸發模式。");
+        if (MinimumIntervalMs is < 0 or > 60000) throw new ArgumentException("施放間隔須為 0～60000 ms。");
+        if (KeyHoldMs is < 1 or > 5000) throw new ArgumentException("按鍵持續時間須為 1～5000 ms。");
+    }
+}
 
 public sealed record SourceConfiguration
 {
@@ -34,16 +49,18 @@ public sealed record WorkbenchConfiguration
     public SearchConfiguration Search { get; init; } = new();
     public PixelVerificationOptions Verification { get; init; } = new();
     public string? SkillFlowPath { get; init; }
+    public CastingConfiguration Casting { get; init; } = new();
 
     public void Validate()
     {
         if (Version != 1) throw new ArgumentException("不支援的配置版本，需要 version=1。");
-        if (Source is null || Search is null || Verification is null) throw new ArgumentException("配置分類不可為 null。");
+        if (Source is null || Search is null || Verification is null || Casting is null) throw new ArgumentException("配置分類不可為 null。");
         if (!Enum.IsDefined(Source.Kind)) throw new ArgumentException("來源模式必須為 screen 或 image。");
         if (!double.IsFinite(Search.Threshold) || Search.Threshold is < 0 or > 1)
             throw new ArgumentException("門檻必須為 0～1。");
         if (!double.IsFinite(Search.ProcessScale) || Search.ProcessScale is < 0.1 or > 1)
             throw new ArgumentException("處理倍率必須為 0.1～1。");
         Verification.Validate();
+        Casting.Validate();
     }
 }

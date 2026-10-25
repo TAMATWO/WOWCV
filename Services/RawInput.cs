@@ -74,7 +74,7 @@ public sealed class RawInput : IRawInput
             KeyboardInput?.Invoke(this, new()
             {
                 Device = header.Device, Key = key, ScanCode = k.MakeCode,
-                Flags = k.Flags, IsDown = (k.Flags & 1) == 0
+                Flags = k.Flags, IsDown = (k.Flags & 1) == 0, ExtraInformation = k.ExtraInformation
             });
         }
         else if (header.Type == 0 && header.Size >= headerSize + Marshal.SizeOf<RawMouse>())

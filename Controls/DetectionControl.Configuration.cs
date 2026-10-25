@@ -63,6 +63,7 @@ public sealed partial class DetectionControl
             processScale.Value = (decimal)appConfiguration.Search.ProcessScale;
             multiScale.Checked = appConfiguration.Search.MultiScale;
             pixelSettings.ApplyOptions(appConfiguration.Verification);
+            RestoreCastingOptions();
             preview.RestoreSelection(null);
             useRoi.Checked = appConfiguration.Search.UseRoi;
             if (appConfiguration.Search.Roi is { } roi)
@@ -93,6 +94,7 @@ public sealed partial class DetectionControl
             detecting = false; toggle.Text = "開始偵測";
         }
         finally { applyingConfiguration = false; configurationReady = true; }
+        TemplateFolderChanged?.Invoke(this, EventArgs.Empty);
         UpdatePreviewViewport(); RefreshPersistenceStatus();
     }
 
@@ -129,7 +131,8 @@ public sealed partial class DetectionControl
                 Threshold = (double)threshold.Value, ProcessScale = (double)processScale.Value,
                 MultiScale = multiScale.Checked, UseRoi = useRoi.Checked
             },
-            Verification = pixelSettings.GetOptions()
+            Verification = pixelSettings.GetOptions(),
+            Casting = GetCastingOptions()
         };
         configurationStore.QueueSave(appConfiguration);
         RefreshPersistenceStatus();

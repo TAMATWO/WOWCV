@@ -1,6 +1,6 @@
 namespace WOWCV.Services;
 
-/// <summary>Contract only. No input injection is implemented.</summary>
+/// <summary>Input output contract. Tests supply a recording implementation.</summary>
 public interface ISendInput
 {
     void KeyDown(Keys key);

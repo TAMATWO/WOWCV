@@ -8,7 +8,8 @@ namespace WOWCV.Services;
 public sealed record DetectionSettings(long Version, Rectangle ScreenBounds, string? ImagePath, string? TemplateFolder,
     double ProcessScale = 1.0, double Threshold = 0.8, bool MultiScale = false,
     bool Detecting = false, Rectangle? Roi = null, int TemplateRevision = 0,
-    PixelVerificationOptions? PixelVerification = null);
+    PixelVerificationOptions? PixelVerification = null, SkillBindingSnapshot? SkillBindings = null,
+    long TrackingResetRevision = 0, string? SourceIdentity = null);
 
 public sealed record DetectionRow(string Template, bool Found, double Similarity, double Difference,
     double Scale, int X, int Y, int Width, int Height, double Mse, bool CandidatePassed,
@@ -66,7 +67,7 @@ public sealed class TemplateMatchingService : IDisposable
         cacheKey = key;
     }
 
-    public IReadOnlyList<DetectionRow> Match(Mat frame, DetectionSettings settings, CancellationToken token)
+    public IReadOnlyList<DetectionRow> Match(Mat frame, DetectionSettings settings, CancellationToken token, bool annotate = true)
     {
         if (settings.ProcessScale is < 0.1 or > 1 || !double.IsFinite(settings.ProcessScale)
             || settings.Threshold is < 0 or > 1 || !double.IsFinite(settings.Threshold))
@@ -145,7 +146,23 @@ public sealed class TemplateMatchingService : IDisposable
                 ox + x + width / 2, oy + y + height / 2, width, height, mse,
                 candidatePassed, verification, bounds, refined));
         }
-        // Finish all sampling before adding any rectangles/text, including overlapping templates.
+        if (annotate) DrawResults(frame, rows);
+        return rows.OrderByDescending(row => row.Similarity).ToArray();
+    }
+
+    public IReadOnlySet<string> LoadedTemplateNames => templates.Select(template => template.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    public PixelVerificationResult VerifyAt(Mat frame, string templateName, Rectangle bounds, PixelVerificationOptions options)
+    {
+        var template = templates.FirstOrDefault(item => item.Name.Equals(templateName, StringComparison.OrdinalIgnoreCase));
+        return template is null ? new(PixelCheckStatus.NotRun, 0, [], "樣版未載入或無法讀取")
+            : PixelVerificationService.Verify(frame, bounds, template.Color, options);
+    }
+
+    public static void DrawResults(Mat frame, IEnumerable<DetectionRow> rows)
+    {
+        var full = new Rectangle(0, 0, frame.Width, frame.Height);
+        // All consumers, including remembered skill boxes, must sample before this final drawing stage.
         foreach (var row in rows.Where(row => row.CandidatePassed && full.Contains(row.Bounds)))
         {
             var color = row.Found ? Scalar.LimeGreen : Scalar.Yellow;
@@ -153,7 +170,6 @@ public sealed class TemplateMatchingService : IDisposable
             Cv2.PutText(frame, $"{row.Template} {row.Similarity:0.000}",
                 new OpenCvSharp.Point(row.Bounds.X, Math.Max(16, row.Bounds.Y - 6)), HersheyFonts.HersheySimplex, 0.5, color);
         }
-        return rows.OrderByDescending(row => row.Similarity).ToArray();
     }
 
     public static double CalculateMse(Mat first, Mat second)

@@ -26,6 +26,13 @@ public sealed class RoiPictureBox : PictureBox
     private Point? anchor;
     private Rectangle? dragSelection, viewport;
     private (Point Point, bool Matches, int Number)[] sampleMarkers = [];
+    private Rectangle? trackedBounds;
+    private bool trackedMatches;
+
+    public void SetTrackedBounds(Rectangle? region, bool matches)
+    {
+        trackedBounds = region; trackedMatches = matches; Invalidate();
+    }
 
     /// <summary>The original-image rectangle currently displayed. Selection editing temporarily shows the full image.</summary>
     public Rectangle DisplayedSourceBounds
@@ -136,6 +143,12 @@ public sealed class RoiPictureBox : PictureBox
         float sx = (float)bounds.Width / source.Width, sy = (float)bounds.Height / source.Height;
         var overlayState = pe.Graphics.Save();
         pe.Graphics.SetClip(bounds, CombineMode.Intersect);
+        if (trackedBounds is { } tracked)
+        {
+            using var trackedPen = new Pen(trackedMatches ? Color.LimeGreen : Color.Cyan, 2) { DashStyle = DashStyle.Dash };
+            pe.Graphics.DrawRectangle(trackedPen, bounds.X + (tracked.X - source.X) * sx,
+                bounds.Y + (tracked.Y - source.Y) * sy, tracked.Width * sx, tracked.Height * sy);
+        }
         if ((dragSelection ?? Selection) is { Width: > 0, Height: > 0 } roi)
         {
             var rect = new RectangleF(bounds.X + (roi.X - source.X) * sx, bounds.Y + (roi.Y - source.Y) * sy, roi.Width * sx, roi.Height * sy);

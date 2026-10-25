@@ -40,6 +40,7 @@ public sealed class RawInputService : IDisposable
             using var window = new InputWindow(input);
             input.KeyboardInput += (_, e) =>
             {
+                if (e.ExtraInformation == WindowsSendInput.InputMarker) return;
                 if (e.IsDown) pressed[e.Key] = 0; else pressed.TryRemove(e.Key, out byte ignored);
                 KeyboardInput?.Invoke(this, e);
             };

@@ -22,5 +22,7 @@ public sealed class SkillEntry
     [JsonPropertyName("cd_sec")] public decimal CdSec { get; set; }
     [JsonPropertyName("skillweight")] public int SkillWeight { get; set; } = 100;
     [JsonPropertyName("cooldown_check")] public string CooldownCheck { get; set; } = "";
+    [JsonPropertyName("template_file")] public string TemplateFile { get; set; } = "";
+    [JsonPropertyName("cast_key")] public string CastKey { get; set; } = "";
     [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
 }

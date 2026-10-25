@@ -150,7 +150,7 @@ internal static class WorkbenchConfigurationTests
             var detection = Find<DetectionControl>(form).Single();
             var preview = Find<RoiPictureBox>(detection).Single();
             WaitFor(() => preview.Image is not null);
-            var selected = Find<ComboBox>(detection).Single();
+            var selected = Find<ComboBox>(detection).Single(control => control.Name == "SourceScreen");
             check(Screen.AllScreens[selected.SelectedIndex].DeviceName == sample.Source.ScreenDeviceName
                 && preview.Image!.Size == Screen.AllScreens[selected.SelectedIndex].Bounds.Size,
                 "Screen mode and the selected monitor restore independently of the remembered image path");

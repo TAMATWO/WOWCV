@@ -10,7 +10,7 @@ public sealed partial class DetectionControl : UserControl
     public RuntimeConfiguration Configuration { get; } = new();
     private readonly RoiPictureBox preview = new();
     private readonly PixelVerificationControl pixelSettings = new();
-    private readonly ComboBox screens = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+    private readonly ComboBox screens = new() { Name = "SourceScreen", DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
     private readonly NumericUpDown threshold = new() { Name = "Threshold", Minimum = 0, Maximum = 1, DecimalPlaces = 2, Increment = 0.01m, Width = 65 };
     private readonly NumericUpDown processScale = new() { Name = "ProcessScale", Minimum = 0.1m, Maximum = 1, DecimalPlaces = 2, Increment = 0.05m, Width = 65 };
     private readonly CheckBox multiScale = new() { Text = "多尺度 0.8～1.2", AutoSize = true };
@@ -36,8 +36,9 @@ public sealed partial class DetectionControl : UserControl
 
     public DetectionControl() : this(WorkbenchConfigurationStore.DefaultPath) { }
 
-    public DetectionControl(string configurationPath)
+    public DetectionControl(string configurationPath, ISendInput? sender = null)
     {
+        casting = new SkillCastingService(sender ?? new WindowsSendInput());
         configurationStore = new WorkbenchConfigurationStore(configurationPath);
         threshold.Value = (decimal)appConfiguration.Search.Threshold;
         processScale.Value = (decimal)appConfiguration.Search.ProcessScale;
@@ -64,9 +65,11 @@ public sealed partial class DetectionControl : UserControl
         Add("清除範圍", () => preview.ClearSelection());
         toolbar.Controls.Add(toggle);
         Add("重新偵測", Configure);
+        Add("重新定位技能", () => { trackingResetRevision++; Configure(save: false); });
         Add("匯入 TXT / JSON 暫存", ImportConfiguration);
         var toolsHost = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, RowCount = 1 };
         toolsHost.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); toolsHost.Controls.Add(toolbar);
+        InitializeCastingControls(toolsHost);
         var split = new SplitContainer { Dock = DockStyle.Fill, Size = new Size(1300, 650), SplitterDistance = 800 };
         split.Panel1.Controls.Add(preview);
         var right = new TabControl { Dock = DockStyle.Fill };
@@ -80,20 +83,22 @@ public sealed partial class DetectionControl : UserControl
         var config = new TabPage("執行設定暫存"); config.Controls.Add(configurationPreview); config.Controls.Add(configStatus);
         var sampling = new TabPage("五點設定"); sampling.Controls.Add(pixelSettings);
         right.TabPages.AddRange([matches, sampling, config]); split.Panel2.Controls.Add(right);
+        InitializeTrackingPage(right);
         Add("五點位置／容差設定", () => right.SelectedTab = sampling);
-        Controls.Add(split); Controls.Add(toolsHost); Controls.Add(status); Controls.Add(inputStatus); Controls.Add(persistenceStatus);
+        Controls.Add(split); Controls.Add(toolsHost); Controls.Add(castingStatus); Controls.Add(status); Controls.Add(inputStatus); Controls.Add(persistenceStatus);
         foreach (var name in new[] { "樣版", "候選通過", "最終命中", "RGB符合點數", "原因", "相似度", "SqDiffNormed", "樣版倍率", "中心 X", "中心 Y", "寬", "高", "位置校正", "MSE" })
             results.Columns.Add(name, name);
         var reasonColumn = results.Columns["原因"]!;
         reasonColumn.Width = 190; reasonColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
         foreach (var name in new[] { "點", "樣版位置", "畫面位置", "樣版 RGB", "實際 RGB", "符合" }) sampleDetails.Columns.Add(name, name);
-        results.CurrentCellChanged += (_, _) => { if (!updatingResults) ShowSampleDetails(); };
+        results.CurrentCellChanged += (_, _) => { if (!updatingResults) ShowActiveDetails(); };
         pixelSettings.OptionsChanged += (_, _) => Configure();
         foreach (var screen in Screen.AllScreens) screens.Items.Add($"{screen.DeviceName} · {screen.Bounds.Width}×{screen.Bounds.Height}");
         if (screens.Items.Count > 0) screens.SelectedIndex = 0;
         screens.SelectedIndexChanged += (_, _) =>
         {
             if (applyingConfiguration) return;
+            trackingResetRevision++;
             var selected = Screen.AllScreens.ElementAtOrDefault(screens.SelectedIndex);
             appConfiguration = appConfiguration with { Source = appConfiguration.Source with { ScreenDeviceName = selected?.DeviceName } };
             ChangeSource(null);
@@ -103,6 +108,7 @@ public sealed partial class DetectionControl : UserControl
         preview.SelectionChanged += (_, _) =>
         {
             if (applyingConfiguration) return;
+            trackingResetRevision++;
             ClearConfigurationWarnings("原 ROI");
             var rect = preview.Selection;
             var size = preview.Image?.Size ?? Size.Empty;
@@ -115,9 +121,12 @@ public sealed partial class DetectionControl : UserControl
         };
         toggle.Click += (_, _) => { detecting = !detecting; toggle.Text = detecting ? "停止偵測" : "開始偵測"; Configure(); };
         input.KeyboardInput += (_, e) => Volatile.Write(ref latestInput, $"鍵盤 {e.Key} {(e.IsDown ? "按下" : "放開")}");
+        input.KeyboardInput += (_, e) => casting.KeyboardInput(e);
+        pipeline.SkillsUpdated += casting.PublishSnapshot;
+        pipeline.Faulted += reason => casting.Disable(reason);
         input.MouseInput += (_, e) => Volatile.Write(ref latestInput,
             $"滑鼠 {e.Buttons}，滾輪 {e.VerticalWheel}/{e.HorizontalWheel}，{(e.IsAbsolute ? "絕對" : "相對")}位置 {e.X},{e.Y}");
-        input.Error += (_, e) => Volatile.Write(ref latestInputError, e.Message);
+        input.Error += (_, e) => { Volatile.Write(ref latestInputError, e.Message); casting.Disable($"Raw Input 失敗：{e.Message}"); };
         refresh.Tick += (_, _) => RefreshOutput();
     }
 
@@ -125,15 +134,15 @@ public sealed partial class DetectionControl : UserControl
     {
         if (started || stopped) return;
         RestoreConfiguration();
-        started = true; Configure(save: false); pipeline.Start();
-        try { input.Start(); }
+        started = true; casting.Start(); Configure(save: false); pipeline.Start();
+        try { input.Start(); inputReady = true; }
         catch (Exception ex) { Volatile.Write(ref latestInputError, ex.Message); }
         refresh.Start();
     }
     public void StopServices()
     {
         if (stopped) return;
-        stopped = true; refresh.Stop(); pipeline.Dispose(); input.Dispose(); configurationStore.Dispose();
+        stopped = true; refresh.Stop(); casting.Dispose(); pipeline.Dispose(); input.Dispose(); configurationStore.Dispose();
     }
     private void Configure() => Configure(save: true);
     private void Configure(bool save)
@@ -143,10 +152,14 @@ public sealed partial class DetectionControl : UserControl
         if (save && configurationReady) QueueConfigurationSave();
         var allScreens = Screen.AllScreens;
         var bounds = allScreens.Length > 0 ? allScreens[Math.Clamp(screens.SelectedIndex, 0, allScreens.Length - 1)].Bounds : Rectangle.Empty;
-        pipeline.Configure(new(++version, bounds, imagePath, templateFolder, (double)processScale.Value,
+        version++;
+        PrepareCastingContext();
+        pipeline.Configure(new(version, bounds, imagePath, templateFolder, (double)processScale.Value,
             (double)threshold.Value, multiScale.Checked, detecting, useRoi.Checked ? preview.Selection : null, templateRevision,
-            pixelSettings.GetOptions()));
+            pixelSettings.GetOptions(), Configuration.Bindings, trackingResetRevision,
+            imagePath ?? allScreens.ElementAtOrDefault(screens.SelectedIndex)?.DeviceName));
         results.Rows.Clear(); sampleDetails.Rows.Clear(); preview.SetSampleMarkers([]);
+        ClearTrackingDisplay();
         sampleStatus.Text = "等待新的辨識結果。";
     }
     private void UpdatePreviewViewport() => preview.SetViewport(useRoi.Checked ? preview.Selection : null);
@@ -174,7 +187,7 @@ public sealed partial class DetectionControl : UserControl
         templateFolder = dialog.SelectedPath;
         ClearConfigurationWarnings("樣版資料夾");
         appConfiguration = appConfiguration with { Source = appConfiguration.Source with { TemplateFolderPath = templateFolder } };
-        templateRevision++; Configure();
+        templateRevision++; TemplateFolderChanged?.Invoke(this, EventArgs.Empty); Configure();
     }
     private void ImportConfiguration()
     {
@@ -189,6 +202,7 @@ public sealed partial class DetectionControl : UserControl
             appConfiguration = appConfiguration with { SkillFlowPath = dialog.FileName };
             ClearConfigurationWarnings("技能流程檔");
             QueueConfigurationSave();
+            Configure(save: false);
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         { MessageBox.Show(this, ex.Message, "匯入失敗（保留原暫存）"); }
@@ -225,9 +239,9 @@ public sealed partial class DetectionControl : UserControl
                     results.HorizontalScrollingOffset = horizontalOffset;
                 }
                 finally { updatingResults = false; }
-                ShowSampleDetails();
+                UpdateTrackedResults(value.Skills); ShowActiveDetails();
                 status.Text = $"{(imagePath is null ? "螢幕絕對中心座標" : "圖片中心座標")} · {value.Status} · {(detecting ? "偵測中" : "僅預覽")}\n" +
-                    $"像素 {value.SourcePixels:N0} → {value.ProcessPixels:N0} · 處理 {value.ElapsedMs:F1} ms · 候選 {value.Rows.Count(row => row.CandidatePassed)} / 命中 {value.Rows.Count(row => row.Found)}";
+                    $"像素 {value.SourcePixels:N0} → {value.ProcessPixels:N0} · 處理 {value.ElapsedMs:F1} ms · 候選 {value.Rows.Count(row => row.CandidatePassed)} / 樣版命中 {value.Rows.Count(row => row.Found)} / 技能框命中 {value.Skills.Items.Count(item => item.Found)}";
                 preview.Invalidate();
             }
         }
@@ -236,6 +250,7 @@ public sealed partial class DetectionControl : UserControl
         inputStatus.Text = error.Length > 0 ? $"Raw Input：{error}"
             : $"Raw Input：{Volatile.Read(ref latestInput)} · 按住 {string.Join(", ", input.PressedKeys)}";
         RefreshPersistenceStatus();
+        RefreshCastingStatus();
     }
     private static string PointCount(PixelVerificationResult result) => result.Samples.Count == 5 ? $"{result.MatchCount}/5" : "—";
 
