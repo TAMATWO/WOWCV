@@ -248,6 +248,10 @@ internal static class SkillTrackingTests
         Find<TabControl>(detection).Single().SelectedTab = Find<TabControl>(detection).Single().TabPages.Cast<TabPage>().Single(page => page.Text == "已定位技能");
         check((string)table.Rows[0].Cells["技能"].Value! == "技能A" && (string)table.Rows[0].Cells["施放鍵"].Value! == "1",
             "Located-skill UI displays skill identity and the stored casting key");
+        check(table.Font.SizeInPoints == 12 && table.Columns["縮圖"]!.Index < table.Columns["技能"]!.Index
+            && table.Rows[0].Cells["縮圖"].Value is Bitmap
+            && table.Rows[0].Cells["樣版"].ToolTipText == "skill.png",
+            "Located skills use 12pt text with a thumbnail before skill identity and a full template-name tooltip");
         check(Find<DataGridView>(detection).Single(control => control.Name == "TrackedSkillDetails").Rows.Count == 5,
             "Selecting a located skill displays five expected and actual RGB values");
         using (var image = Frame(template, flash: true)) Cv2.ImWrite(source, image);

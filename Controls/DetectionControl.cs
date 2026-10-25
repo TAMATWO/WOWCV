@@ -88,6 +88,7 @@ public sealed partial class DetectionControl : UserControl
         Controls.Add(split); Controls.Add(toolsHost); Controls.Add(castingStatus); Controls.Add(status); Controls.Add(inputStatus); Controls.Add(persistenceStatus);
         foreach (var name in new[] { "樣版", "候選通過", "最終命中", "RGB符合點數", "原因", "相似度", "SqDiffNormed", "樣版倍率", "中心 X", "中心 Y", "寬", "高", "位置校正", "MSE" })
             results.Columns.Add(name, name);
+        InitializeTemplateResultDisplay(results);
         var reasonColumn = results.Columns["原因"]!;
         reasonColumn.Width = 190; reasonColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
         foreach (var name in new[] { "點", "樣版位置", "畫面位置", "樣版 RGB", "實際 RGB", "符合" }) sampleDetails.Columns.Add(name, name);
@@ -160,6 +161,7 @@ public sealed partial class DetectionControl : UserControl
             imagePath ?? allScreens.ElementAtOrDefault(screens.SelectedIndex)?.DeviceName));
         results.Rows.Clear(); sampleDetails.Rows.Clear(); preview.SetSampleMarkers([]);
         ClearTrackingDisplay();
+        ResetTemplateThumbnailsIfChanged();
         sampleStatus.Text = "等待新的辨識結果。";
     }
     private void UpdatePreviewViewport() => preview.SetViewport(useRoi.Checked ? preview.Selection : null);
@@ -226,12 +228,14 @@ public sealed partial class DetectionControl : UserControl
                     results.Rows.Clear();
                     foreach (var row in value.Rows)
                     {
-                        int index = results.Rows.Add(row.Template, row.CandidatePassed ? "是" : "否", row.Found ? "是" : "否",
+                        int index = results.Rows.Add(GetTemplateThumbnail(row.Template)!, ShortTemplateName(row.Template), row.CandidatePassed ? "是" : "否", row.Found ? "是" : "否",
                             PointCount(row.PixelVerification), row.PixelVerification.Reason,
                             row.Similarity.ToString("F6"), row.Difference.ToString("F6"),
                             row.Scale.ToString("F2"), row.X, row.Y, row.Width, row.Height,
                             row.PositionRefined ? "已校正" : "—", row.Mse.ToString("F4"));
                         results.Rows[index].Tag = row;
+                        results.Rows[index].Cells["樣版"].ToolTipText = row.Template;
+                        results.Rows[index].Cells["縮圖"].ToolTipText = row.Template;
                         if (row.Template == selectedTemplate) results.CurrentCell = results.Rows[index].Cells[selectedColumn];
                     }
                     if (results.Rows.Count > 0 && firstVisibleRow >= 0)
@@ -271,7 +275,8 @@ public sealed partial class DetectionControl : UserControl
     }
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { StopServices(); refresh.Dispose(); }
+        if (disposing) { StopServices(); refresh.Dispose(); results.Rows.Clear(); trackedResults.Rows.Clear(); DisposeTemplateThumbnails(); }
         base.Dispose(disposing);
+        if (disposing) resultTableFont.Dispose();
     }
 }

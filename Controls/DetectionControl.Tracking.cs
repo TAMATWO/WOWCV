@@ -35,6 +35,7 @@ public sealed partial class DetectionControl
         tabs.TabPages.Insert(1, trackedPage);
         foreach (string name in new[] { "技能", "樣版", "施放鍵", "狀態", "符合點數", "中心 X", "中心 Y", "寬", "高", "原因" })
             trackedResults.Columns.Add(name, name);
+        InitializeTemplateResultDisplay(trackedResults);
         foreach (string name in new[] { "點", "樣版位置", "畫面位置", "樣版 RGB", "實際 RGB", "符合" }) trackedDetails.Columns.Add(name, name);
         trackedResults.CurrentCellChanged += (_, _) => { if (!updatingResults) ShowActiveDetails(); };
         tabs.SelectedIndexChanged += (_, _) => ShowActiveDetails();
@@ -61,12 +62,15 @@ public sealed partial class DetectionControl
             foreach (var item in snapshot.Items)
             {
                 var bounds = item.Bounds;
-                int index = trackedResults.Rows.Add(item.Binding.SkillName, item.Binding.TemplateFile, item.Binding.CastKey,
+                int index = trackedResults.Rows.Add(GetTemplateThumbnail(item.Binding.TemplateFile)!, item.Binding.SkillName,
+                    ShortTemplateName(item.Binding.TemplateFile), item.Binding.CastKey,
                     StateText(item.State), PointCount(item.Verification),
                     bounds is { } box ? snapshot.Origin.X + box.X + box.Width / 2 : "—",
                     bounds is { } boxY ? snapshot.Origin.Y + boxY.Y + boxY.Height / 2 : "—",
                     bounds?.Width.ToString() ?? "—", bounds?.Height.ToString() ?? "—", item.Reason);
                 trackedResults.Rows[index].Tag = item;
+                trackedResults.Rows[index].Cells["樣版"].ToolTipText = item.Binding.TemplateFile;
+                trackedResults.Rows[index].Cells["縮圖"].ToolTipText = item.Binding.TemplateFile;
                 if (item.Binding == selected) trackedResults.CurrentCell = trackedResults.Rows[index].Cells[column];
             }
             if (trackedResults.Rows.Count > 0 && firstVisibleRow >= 0)

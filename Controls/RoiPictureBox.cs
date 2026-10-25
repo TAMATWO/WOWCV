@@ -4,7 +4,7 @@ using System.Drawing.Drawing2D;
 namespace WOWCV.Controls;
 
 /// <summary>Selections use source pixels, independent of zoom and letterboxing.</summary>
-public sealed class RoiPictureBox : PictureBox
+public sealed partial class RoiPictureBox : PictureBox
 {
     public Rectangle? Selection { get; private set; }
     private bool selectionEnabled;
@@ -61,11 +61,12 @@ public sealed class RoiPictureBox : PictureBox
     public RoiPictureBox()
     {
         Dock = DockStyle.Fill; SizeMode = PictureBoxSizeMode.Zoom;
+        DoubleBuffered = true;
         BackColor = Color.FromArgb(25, 28, 34);
     }
     public void ClearSelection()
     {
-        Selection = null; anchor = null; dragSelection = null; Capture = false;
+        Selection = null; anchor = null; dragSelection = null; Capture = false; ResetMagnifier();
         Invalidate(); SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
     /// <summary>Restore a validated selection in original-image coordinates without simulating a mouse drag.</summary>
@@ -94,12 +95,14 @@ public sealed class RoiPictureBox : PictureBox
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
+        UpdateMagnifier(e.Location);
         if (SelectionEnabled && e.Button == MouseButtons.Left && Image is not null && DisplayBounds().Contains(e.Location))
         { anchor = ToImage(e.Location); dragSelection = null; Capture = true; }
     }
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
+        UpdateMagnifier(e.Location);
         if (anchor is not { } start || Image is null) return;
         var end = ToImage(e.Location);
         dragSelection = Rectangle.FromLTRB(Math.Min(start.X, end.X), Math.Min(start.Y, end.Y), Math.Max(start.X, end.X), Math.Max(start.Y, end.Y));
@@ -175,6 +178,7 @@ public sealed class RoiPictureBox : PictureBox
             pe.Graphics.DrawString(marker.Number.ToString(), Font, brush, x + 5, y - 10);
         }
         pe.Graphics.Restore(overlayState);
+        DrawMagnifier(pe.Graphics);
     }
     protected override void Dispose(bool disposing)
     {

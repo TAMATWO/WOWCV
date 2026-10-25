@@ -27,6 +27,7 @@ internal static class Program
             TestRawInput();
             TestRoiSelection();
             RoiViewportTests.Run(Check);
+            MagnifierTests.Run(root, Check);
             WorkbenchConfigurationTests.Run(root, Check);
             TestTabs(root);
             TestPixelResultsUi(root);
@@ -75,15 +76,69 @@ internal static class Program
         Check(cells[0].Location == roi.Location && cells[5].Right == roi.Right && cells[5].Bottom == roi.Bottom, "Grid respects ROI edges");
         Throws<ArgumentException>(() => SkillSlicingService.GetCells(roi, 100, 3), "Subpixel cells rejected");
         using var source = new Mat(50, 110, MatType.CV_8UC3, new Scalar(20, 80, 160));
+        Cv2.Randu(source, Scalar.All(0), Scalar.All(255));
         var folder = Path.Combine(root, "exports"); Directory.CreateDirectory(folder);
         string sentinel = Path.Combine(folder, "keep.txt"); File.WriteAllText(sentinel, "keep");
-        string output = SkillSlicingService.Export(source, roi, 2, 3, folder, CancellationToken.None);
-        string second = SkillSlicingService.Export(source, roi, 2, 3, folder, CancellationToken.None);
+        var clock = new SlicingClock();
+        string output = SkillSlicingService.Export(source, roi, 2, 3, folder, CancellationToken.None, clock);
+        string second = SkillSlicingService.Export(source, roi, 2, 3, folder, CancellationToken.None, clock);
         Check(output != second && File.ReadAllText(sentinel) == "keep", "Exports use distinct directories and preserve existing files");
+        Check(Path.GetFileName(output) == "Skills_261025_213045" && Path.GetFileName(second) == "Skills_261025_213045_01",
+            "Export folders use local yyMMdd_HHmmss and increment suffixes within the same second");
+        string occupied = Path.Combine(folder, "Skills_261025_213045_02"); File.WriteAllText(occupied, "keep");
+        string third = SkillSlicingService.Export(source, roi, 2, 3, folder, CancellationToken.None, clock);
+        Check(Path.GetFileName(third) == "Skills_261025_213045_03" && File.ReadAllText(occupied) == "keep",
+            "Folder allocation also skips existing files without replacing them");
         Check(Directory.GetFiles(output, "*.png").Length == 6, "Exports all row/column PNG files");
-        using var saved = Cv2.ImRead(Path.Combine(output, "Skill_R2_C3.png"));
-        Check(saved.Width == cells[5].Width && saved.Height == cells[5].Height, "Exported cell dimensions match preview");
+        var paths = new[] { output, second, third }.SelectMany(path => Directory.GetFiles(path, "*.png")).ToArray();
+        Check(paths.Length == 18 && paths.All(path => Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out _))
+            && paths.Select(Path.GetFileName).Distinct().Count() == 18, "Each exported PNG uses a unique complete GUID without hyphens");
+        var remaining = cells.ToList();
+        foreach (string path in Directory.GetFiles(output, "*.png"))
+        {
+            using var saved = Cv2.ImRead(path);
+            int match = remaining.FindIndex(rect =>
+            {
+                if (saved.Width != rect.Width || saved.Height != rect.Height) return false;
+                using var expected = new Mat(source, new Rect(rect.X, rect.Y, rect.Width, rect.Height));
+                return Cv2.Norm(saved, expected, NormTypes.INF) == 0;
+            });
+            if (match < 0) throw new InvalidOperationException("Exported PNG does not match any original grid cell.");
+            remaining.RemoveAt(match);
+        }
+        Check(remaining.Count == 0, "GUID-named PNGs preserve every cell's dimensions and exact original pixels");
+        var originals = Directory.GetFiles(output, "*.png").ToDictionary(path => path, File.ReadAllBytes);
+        string originalNote = Path.Combine(output, "keep.txt"); File.WriteAllText(originalNote, "keep");
+        using var anotherSource = new Mat(40, 80, MatType.CV_8UC3, new Scalar(33, 77, 121));
+        string appended = SkillSlicingService.Export(anotherSource, new Rectangle(0, 0, 80, 40), 2, 2,
+            output, CancellationToken.None, mode: SlicingExportMode.ExistingFolder);
+        Check(appended == output && Directory.GetDirectories(output).Length == 0 && Directory.GetFiles(output, "*.png").Length == 10,
+            "A second image appends every crop directly into the selected existing folder");
+        Check(originals.All(pair => File.ReadAllBytes(pair.Key).SequenceEqual(pair.Value)) && File.ReadAllText(originalNote) == "keep",
+            "Appending preserves every existing PNG and unrelated file byte for byte");
+        var additions = Directory.GetFiles(output, "*.png").Where(path => !originals.ContainsKey(path)).ToArray();
+        Check(additions.Length == 4 && additions.All(path => Guid.TryParseExact(Path.GetFileNameWithoutExtension(path), "N", out _)),
+            "Appended crops receive independent GUID filenames");
+        bool appendedPixelsCorrect = additions.All(path =>
+        {
+            using var saved = Cv2.ImRead(path);
+            using var expected = new Mat(20, 40, MatType.CV_8UC3, new Scalar(33, 77, 121));
+            return saved.Size() == expected.Size() && Cv2.Norm(saved, expected, NormTypes.INF) == 0;
+        });
+        Check(appendedPixelsCorrect, "Appended PNG dimensions and pixels come from the second source image");
+        string absent = Path.Combine(folder, "absent");
+        Throws<DirectoryNotFoundException>(() => SkillSlicingService.Export(source, roi, 2, 3, absent,
+            CancellationToken.None, mode: SlicingExportMode.ExistingFolder), "Append mode requires an existing destination folder");
+        Check(!Directory.Exists(absent), "An invalid append destination does not create an output directory");
+        Throws<OperationCanceledException>(() => SkillSlicingService.Export(source, roi, 2, 3, output,
+            new CancellationToken(true), mode: SlicingExportMode.ExistingFolder), "Append mode observes cancellation before changing existing files");
+        Check(Directory.GetFiles(output, "*.png").Length == 10, "Canceled append leaves the destination unchanged");
         Throws<OperationCanceledException>(() => SkillSlicingService.Export(source, roi, 2, 3, folder, new CancellationToken(true)), "Export observes cancellation");
+    }
+    private sealed class SlicingClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2026, 10, 25, 13, 30, 45, TimeSpan.Zero);
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.CreateCustomTimeZone("Slicing +08", TimeSpan.FromHours(8), "Slicing +08", "Slicing +08");
     }
     private static string TemplateFolder(string root) => Path.Combine(root, "templates");
     private static Mat MakeTemplate()
@@ -205,6 +260,11 @@ internal static class Program
         Check(tabs.TabPages.Count == 3, "Main form contains three integrated pages");
         Check(tabs.TabPages[0].Controls[0] is DetectionControl && tabs.TabPages[1].Controls[0] is SlicingControl
             && tabs.TabPages[2].Controls[0] is SkillEditorControl, "Each page owns its separate feature control");
+        Check(!FindControls<RoiPictureBox>(tabs.TabPages[0]).Single().MagnifierEnabled,
+            "Main detection preview does not enable the slicing magnifier");
+        var slicingMode = FindControls<ComboBox>(tabs.TabPages[1]).Single(control => control.Name == "SlicingExportMode");
+        Check(slicingMode.SelectedIndex == 0 && slicingMode.Items.Cast<string>().SequenceEqual(["建立新資料夾", "加入既有資料夾"]),
+            "Slicing page offers both export destinations and defaults to creating a new folder");
         var editor = (SkillEditorControl)tabs.TabPages[2].Controls[0];
         Check(editor.ConfirmDiscard(), "Unmodified editor closes without prompting");
         for (int index = 0; index < 3; index++)
@@ -240,11 +300,15 @@ internal static class Program
 
     private static void TestPixelResultsUi(string root)
     {
+        string thumbnailFolder = Path.Combine(root, "results-templates"); Directory.CreateDirectory(thumbnailFolder);
+        const string longTemplateName = "a81f23b4c56d7890aabbccddeeff0011.png";
+        File.Copy(Path.Combine(root, "pixel-templates", "skill.png"), Path.Combine(thumbnailFolder, longTemplateName));
+        File.Copy(Path.Combine(root, "pixel-templates", "skill-copy.png"), Path.Combine(thumbnailFolder, "skill-copy.png"));
         string configPath = Path.Combine(root, "results-config", "config.json");
         using (var store = new WorkbenchConfigurationStore(configPath))
         {
             store.QueueSave(new() { Source = new() { Kind = SourceKind.Image,
-                ImagePath = Path.Combine(root, "pixel-ui.png"), TemplateFolderPath = Path.Combine(root, "pixel-templates") } });
+                ImagePath = Path.Combine(root, "pixel-ui.png"), TemplateFolderPath = thumbnailFolder } });
             store.Flush();
         }
         using var form = new Form1(configPath) { ShowInTaskbar = false, Opacity = 0, StartPosition = FormStartPosition.Manual,
@@ -258,6 +322,16 @@ internal static class Program
         WaitFor(() => table.Rows.Count == 2);
         Check(table.Rows.Cast<DataGridViewRow>().All(row => row.Tag is DetectionRow { Found: true }),
             "Live UI distinguishes successful candidates and final hits");
+        var longRow = table.Rows.Cast<DataGridViewRow>().Single(row => ((DetectionRow)row.Tag!).Template == longTemplateName);
+        Check((string)longRow.Cells["樣版"].Value! == "a81f23b4….png"
+            && table.Font.SizeInPoints == 12
+            && longRow.Cells["樣版"].ToolTipText == longTemplateName
+            && longRow.Cells["縮圖"].Value is Bitmap,
+            "Result rows pair a template thumbnail with a short filename and full-name tooltip");
+        Check(table.Rows.Cast<DataGridViewRow>().Single(row => ((DetectionRow)row.Tag!).Template == "skill-copy.png")
+            .Cells["樣版"].Value as string == "skill-copy.png", "Short template names remain fully readable");
+        using (var unlocked = new FileStream(Path.Combine(thumbnailFolder, longTemplateName), FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            Check(unlocked.Length > 0, "Thumbnail rendering releases its source image file immediately");
         Check(details.Rows.Count == 5 && (string)details.Rows[0].Cells[5].Value! == "是",
             "Selecting a live result populates five expected/actual RGB rows");
         table.CurrentCell = table.Rows[1].Cells[0];
