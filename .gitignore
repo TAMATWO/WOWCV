@@ -5,3 +5,12 @@
 /WOWCV.csproj.user
 /obj
 /bin/Debug/net10.0-windows
+**/bin/
+**/obj/
+/[Ss]kills_*/
+/[Ss]kills.json
+**/config.json
+**/config.json.bak
+**/config.json.tmp
+/AGENTS.md
+/feature分支功能說明.txt
