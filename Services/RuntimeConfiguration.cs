@@ -11,9 +11,11 @@ public sealed class RuntimeConfiguration
     public bool HasValue => Volatile.Read(ref state) is not null;
     public SkillDocument? Read() => Volatile.Read(ref state) is { } value ? SkillDocumentService.Parse(value.Json) : null;
     public SkillBindingSnapshot Bindings => Volatile.Read(ref state)?.Bindings ?? SkillBindingSnapshot.Empty;
-    public void Import(string text)
+    public void Import(string text) => Import(text, out _);
+
+    public void Import(string text, out IReadOnlyList<string> adjustments)
     {
-        var validated = SkillDocumentService.Parse(text);
+        var validated = SkillDocumentService.Parse(text, out adjustments);
         string json = SkillDocumentService.Serialize(validated);
         lock (gate)
         {

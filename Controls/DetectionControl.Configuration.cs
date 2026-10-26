@@ -82,10 +82,15 @@ public sealed partial class DetectionControl
                 {
                     try
                     {
-                        Configuration.Import(File.ReadAllText(path));
+                        Configuration.Import(File.ReadAllText(path), out var adjustments);
                         var document = Configuration.Read()!;
                         configurationPreview.Text = SkillDocumentService.Serialize(document);
                         configStatus.Text = $"已恢復：{Path.GetFileName(path)} · {document.Data.Count} 組按鍵";
+                        if (adjustments.Count > 0)
+                        {
+                            configStatus.Text += $" · {adjustments.Count} 個 cd_sec 已四捨五入（原檔未修改）";
+                            configurationWarnings.Add($"技能流程檔：{adjustments.Count} 個 cd_sec 已四捨五入，僅套用至暫存，原檔未修改");
+                        }
                     }
                     catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
                     { configurationWarnings.Add($"技能流程檔未載入：{ex.Message}"); }

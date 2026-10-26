@@ -13,8 +13,8 @@ public sealed class SkillEditorControl : UserControl
     private string saved = "";
     private bool loading;
     private int bindingIndex, skillIndex;
-    private readonly ComboBox bindingList = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly ComboBox skillList = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox bindingList = new() { Name = "SkillBindingSelector", DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox skillList = new() { Name = "SkillEntrySelector", DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly TextBox pressInput = new(), nameInput = new(), checkInput = new();
     private readonly TextBox castKeyInput = new() { Name = "CastKeyInput" };
     private readonly TextBox templateInput = new() { Name = "TemplateFileInput", ReadOnly = true, Width = 180 };
@@ -27,6 +27,8 @@ public sealed class SkillEditorControl : UserControl
     private readonly FlowLayoutPanel cards = new() { Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(24) };
     private readonly Label footer = new() { Dock = DockStyle.Bottom, Height = 32, Padding = new Padding(20, 5, 0, 0) };
     private Button undoButton = null!, redoButton = null!;
+    private readonly Button deleteSkillButton, deleteBindingButton;
+    private readonly Func<string, int, bool> confirmBindingDeletion;
     private readonly List<Control> skillInputs = [];
     private Action<decimal> showPriority = _ => { }, showWeight = _ => { }, showCd = _ => { };
     private SkillBinding? SelectedBinding => document.Data.ElementAtOrDefault(bindingIndex);
@@ -41,16 +43,24 @@ public sealed class SkillEditorControl : UserControl
         return button;
     }
 
-    public SkillEditorControl()
+    public SkillEditorControl() : this(null) { }
+
+    public SkillEditorControl(Func<string, int, bool>? confirmBindingDeletion)
     {
+        this.confirmBindingDeletion = confirmBindingDeletion ?? ((press, count) => MessageBox.Show(this,
+            $"確定刪除按鍵組「{press}」及其內的 {count} 個技能？\n刪除後可使用「修改前（復原）」還原。",
+            "刪除按鍵組", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) == DialogResult.Yes);
         Text = "WOWCV · 技能流程編輯器";
         Font = new Font("Microsoft JhengHei UI", 10);
         Size = new Size(1280, 880);
 
         ForeColor = Color.FromArgb(30, 41, 59);
         BackColor = Color.FromArgb(241, 245, 249);
-        var toolbar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 66, Padding = new Padding(20, 14, 0, 0), BackColor = Color.White };
-        toolbar.Controls.AddRange([MakeButton("開啟 JSON / TXT", ImportDocument), MakeButton("儲存 JSON / TXT", SaveDocument), MakeButton("新增按鍵組", AddBinding), MakeButton("新增技能", AddSkill)]);
+        var toolbar = new FlowLayoutPanel { Name = "SkillEditorToolbar", Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(20, 14, 0, 6), BackColor = Color.White };
+        deleteSkillButton = MakeButton("刪除技能", DeleteSkill); deleteSkillButton.Name = "DeleteSkill";
+        deleteBindingButton = MakeButton("刪除按鍵組", DeleteBinding); deleteBindingButton.Name = "DeleteSkillBinding";
+        toolbar.Controls.AddRange([MakeButton("開啟 JSON / TXT", ImportDocument), MakeButton("儲存 JSON / TXT", SaveDocument),
+            MakeButton("新增按鍵組", AddBinding), MakeButton("新增技能", AddSkill), deleteSkillButton, deleteBindingButton]);
         var split = new SplitContainer { Dock = DockStyle.Fill, Size = ClientSize, FixedPanel = FixedPanel.Panel1, SplitterDistance = 390, Panel1MinSize = 360, Panel2MinSize = 400 };
         var editor = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(20), BackColor = Color.White };
         split.Panel1.Controls.Add(editor);
@@ -70,15 +80,15 @@ public sealed class SkillEditorControl : UserControl
         Field("技能名稱 · skillname", nameInput, true);
         statusInput.Items.AddRange(["Y", "A"]);
         Field("狀態 · status（保留，本階段不解讀）", statusInput, true);
-        showPriority = NumberField(editor, "優先序 · priority（小值優先）", false, v => Edit(() => SelectedSkill!.Priority = (int)v));
-        showWeight = NumberField(editor, "權重 · skillweight（同優先序，大值優先）", false, v => Edit(() => SelectedSkill!.SkillWeight = (int)v));
-        showCd = NumberField(editor, "冷卻秒數 · cd_sec", true, v => Edit(() => SelectedSkill!.CdSec = v));
+        showPriority = NumberField(editor, "優先序 · priority（1～10，小值優先）", "Priority", SkillValueLimits.MinimumPriority, SkillValueLimits.MaximumPriority, v => Edit(() => SelectedSkill!.Priority = (int)v));
+        showWeight = NumberField(editor, "權重 · skillweight（1～100，大值優先）", "Weight", SkillValueLimits.MinimumWeight, SkillValueLimits.MaximumWeight, v => Edit(() => SelectedSkill!.SkillWeight = (int)v));
+        showCd = NumberField(editor, "冷卻秒數 · cd_sec（整數 0～600）", "Cooldown", SkillValueLimits.MinimumCooldown, SkillValueLimits.MaximumCooldown, v => Edit(() => SelectedSkill!.CdSec = v));
         Field("冷卻檢查技能 · cooldown_check", checkInput, true);
         var history = new FlowLayoutPanel { Width = 330, Height = 48, Margin = new Padding(0, 16, 0, 0) };
         undoButton = MakeButton("修改前（復原）", () => Restore(undo, redo));
         redoButton = MakeButton("修改後（重做）", () => Restore(redo, undo));
         history.Controls.AddRange([undoButton, redoButton]); editor.Controls.Add(history);
-        editor.Controls.Add(new Label { Text = "調整後立即更新預覽。\n點選右側技能卡片可切換編輯。\n拉桿旁可輸入超出拉桿範圍的數值。", AutoSize = true, ForeColor = Color.SlateGray });
+        editor.Controls.Add(new Label { Text = "調整後立即更新預覽。\n點選右側技能卡片可切換編輯。\n數字輸入與拉桿使用相同範圍。", AutoSize = true, ForeColor = Color.SlateGray });
         var templatePicker = new Panel { Name = "TemplateImagePicker", Height = 32 };
         templatePicker.Controls.AddRange([templateInput, selectTemplateButton, clearTemplateButton]);
         Field("樣版圖片 · template_file", templatePicker, true);
@@ -104,21 +114,22 @@ public sealed class SkillEditorControl : UserControl
 
     }
 
-    private Action<decimal> NumberField(FlowLayoutPanel editor, string title, bool fractional, Action<decimal> changed)
+    private Action<decimal> NumberField(FlowLayoutPanel editor, string title, string key, int minimum, int maximum, Action<decimal> changed)
     {
         editor.Controls.Add(new Label { Text = title, AutoSize = true, Margin = new Padding(0, 9, 0, 4) });
         var panel = new Panel { Width = 325, Height = 40 };
-        var slider = new TrackBar { Minimum = 0, Maximum = fractional ? 6000 : 1000, TickStyle = TickStyle.None, Width = 205, SmallChange = 1, LargeChange = 10 };
-        var number = new NumericUpDown { Left = 210, Width = 110, DecimalPlaces = fractional ? 2 : 0, Increment = fractional ? 0.01m : 1, Minimum = fractional ? 0 : int.MinValue, Maximum = fractional ? decimal.MaxValue : int.MaxValue };
+        var slider = new TrackBar { Name = key + "Slider", Minimum = minimum, Maximum = maximum, TickStyle = TickStyle.None, Width = 205, SmallChange = 1, LargeChange = 10 };
+        var number = new NumericUpDown { Name = key + "Input", Left = 210, Width = 110, DecimalPlaces = 0, Increment = 1, Minimum = minimum, Maximum = maximum };
         bool syncing = false;
-        decimal scale = fractional ? 100 : 1;
-        slider.ValueChanged += (_, _) => { if (!syncing) number.Value = slider.Value / scale; };
+        slider.ValueChanged += (_, _) => { if (!syncing) number.Value = slider.Value; };
         number.ValueChanged += (_, _) =>
         {
+            if (syncing) return;
+            decimal value = decimal.Round(number.Value, 0, MidpointRounding.AwayFromZero);
             syncing = true;
-            slider.Value = (int)(Math.Clamp(number.Value, slider.Minimum / scale, slider.Maximum / scale) * scale);
-            syncing = false;
-            changed(number.Value);
+            try { number.Value = value; slider.Value = (int)value; }
+            finally { syncing = false; }
+            changed(value);
         };
         panel.Controls.AddRange([slider, number]); editor.Controls.Add(panel); skillInputs.Add(panel);
         return value => number.Value = value;
@@ -150,16 +161,22 @@ public sealed class SkillEditorControl : UserControl
         bindingList.Items.Clear();
         foreach (var binding in document.Data) bindingList.Items.Add($"按鍵 {binding.Press} · {binding.Process.Count} 個技能");
         bindingList.SelectedIndex = SelectedBinding is null ? -1 : bindingIndex;
+        bindingList.Enabled = document.Data.Count > 0;
         skillList.Items.Clear();
         if (SelectedBinding is not null) foreach (var skill in SelectedBinding.Process) skillList.Items.Add(skill.SkillName);
         skillList.SelectedIndex = SelectedSkill is null ? -1 : skillIndex;
+        skillList.Enabled = (SelectedBinding?.Process.Count ?? 0) > 0;
+        deleteSkillButton.Enabled = SelectedSkill is not null;
+        deleteBindingButton.Enabled = SelectedBinding is not null;
         pressInput.Enabled = SelectedBinding is not null; pressInput.Text = SelectedBinding?.Press ?? "";
         foreach (var control in skillInputs) control.Enabled = SelectedSkill is not null;
         nameInput.Text = SelectedSkill?.SkillName ?? ""; checkInput.Text = SelectedSkill?.CooldownCheck ?? "";
         statusInput.SelectedIndex = SelectedSkill is null ? -1 : statusInput.Items.IndexOf(SelectedSkill.Status);
         castKeyInput.Text = SelectedSkill?.CastKey ?? "";
         RefreshTemplateSelection();
-        showPriority(SelectedSkill?.Priority ?? 0); showWeight(SelectedSkill?.SkillWeight ?? 0); showCd(SelectedSkill?.CdSec ?? 0);
+        showPriority(SelectedSkill?.Priority ?? SkillValueLimits.MinimumPriority);
+        showWeight(SelectedSkill?.SkillWeight ?? SkillValueLimits.MaximumWeight);
+        showCd(SelectedSkill?.CdSec ?? SkillValueLimits.MinimumCooldown);
         loading = false; RefreshCards();
     }
 
@@ -257,6 +274,19 @@ public sealed class SkillEditorControl : UserControl
         });
         RefreshEditor();
     }
+    private void DeleteSkill()
+    {
+        if (SelectedBinding is not { } binding || SelectedSkill is null) return;
+        Edit(() => binding.Process.RemoveAt(skillIndex));
+        RefreshEditor();
+    }
+
+    private void DeleteBinding()
+    {
+        if (SelectedBinding is not { } binding || !confirmBindingDeletion(binding.Press, binding.Process.Count)) return;
+        Edit(() => { document.Data.RemoveAt(bindingIndex); skillIndex = 0; });
+        RefreshEditor();
+    }
     private void Restore(Stack<string> source, Stack<string> destination)
     {
         if (source.Count == 0) return;
@@ -270,21 +300,36 @@ public sealed class SkillEditorControl : UserControl
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         try
         {
-            var imported = SkillDocumentService.Parse(File.ReadAllText(dialog.FileName));
+            var imported = SkillDocumentService.Parse(File.ReadAllText(dialog.FileName), out var adjustments);
             if (!ConfirmDiscard()) return;
-            document = imported; undo.Clear(); redo.Clear(); bindingIndex = skillIndex = 0; saved = Snapshot(); RefreshEditor();
-            footer.Text = $"已匯入：{Path.GetFileName(dialog.FileName)}";
+            ApplyImportedDocument(imported, adjustments, Path.GetFileName(dialog.FileName));
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         { MessageBox.Show(this, ex.Message, "匯入失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
+    private void ApplyImportedDocument(SkillDocument imported, IReadOnlyList<string> adjustments, string fileName)
+    {
+        document = imported; undo.Clear(); redo.Clear(); bindingIndex = skillIndex = 0;
+        saved = adjustments.Count == 0 ? Snapshot() : "";
+        RefreshEditor();
+        footer.Text = $"已匯入：{fileName}" + (adjustments.Count > 0
+            ? $" · {adjustments.Count} 個 cd_sec 已四捨五入；有尚未儲存的修改，請儲存後更新原檔。" : "");
+    }
+
+    private void SaveToFile(string path)
+    {
+        var validated = SkillDocumentService.Parse(Snapshot());
+        File.WriteAllText(path, SkillDocumentService.Serialize(validated), new System.Text.UTF8Encoding(false));
+        document = validated; saved = Snapshot(); RefreshEditor();
+    }
+
     private void SaveDocument()
     {
         try { SkillDocumentService.Parse(Snapshot()); }
         catch (JsonException ex) { MessageBox.Show(this, ex.Message, "請先完成設定"); return; }
         using var dialog = new SaveFileDialog { Filter = "JSON 設定 (*.json)|*.json|文字設定 (*.txt)|*.txt", FileName = "skills.json" };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        try { File.WriteAllText(dialog.FileName, Snapshot(), new System.Text.UTF8Encoding(false)); saved = Snapshot(); RefreshCards(); }
+        try { SaveToFile(dialog.FileName); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { MessageBox.Show(this, ex.Message, "儲存失敗", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
 }

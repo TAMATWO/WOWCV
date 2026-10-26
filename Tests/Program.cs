@@ -32,6 +32,8 @@ internal static class Program
             TestTabs(root);
             TestPixelResultsUi(root);
             SkillTrackingTests.Run(root, Check);
+            SkillEditorDeletionTests.Run(root, Check);
+            SkillValueLimitTests.Run(root, Check);
             SkillCastingTests.Run(root, Check);
             Console.WriteLine($"PASS: {checks} checks. Artifacts: {root}");
             return 0;
@@ -65,8 +67,8 @@ internal static class Program
         Check(store.Read()!.Data[0].Press == "E", "Failed import preserves previous snapshot");
         Throws<JsonException>(() => store.Import(json.Replace("\"Y\"", "\"Z\"")), "Invalid status rejected");
         Throws<JsonException>(() => store.Import(json.Replace("1.25", "-1")), "Negative cooldown rejected");
-        Check(SkillDocumentService.Parse(SkillDocumentService.Serialize(store.Read()!)).Data[0].Process[0].CdSec == 1.25m,
-            "JSON/TXT content round-trips without precision loss");
+        Check(SkillDocumentService.Parse(SkillDocumentService.Serialize(store.Read()!)).Data[0].Process[0].CdSec == 1m,
+            "Legacy fractional cooldowns round to integer seconds and round-trip consistently");
     }
     private static void TestSlicing(string root)
     {

@@ -18,9 +18,9 @@ public sealed class SkillEntry
 {
     [JsonPropertyName("skillname")] public string SkillName { get; set; } = "新技能";
     [JsonPropertyName("status")] public string Status { get; set; } = "Y";
-    [JsonPropertyName("priority")] public int Priority { get; set; } = 1;
+    [JsonPropertyName("priority")] public int Priority { get; set; } = SkillValueLimits.MinimumPriority;
     [JsonPropertyName("cd_sec")] public decimal CdSec { get; set; }
-    [JsonPropertyName("skillweight")] public int SkillWeight { get; set; } = 100;
+    [JsonPropertyName("skillweight")] public int SkillWeight { get; set; } = SkillValueLimits.MaximumWeight;
     [JsonPropertyName("cooldown_check")] public string CooldownCheck { get; set; } = "";
     [JsonPropertyName("template_file")] public string TemplateFile { get; set; } = "";
     [JsonPropertyName("cast_key")] public string CastKey { get; set; } = "";

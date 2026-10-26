@@ -6,8 +6,11 @@ public static class SkillDocumentService
 {
 public static readonly JsonSerializerOptions Options = new() { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 public static string Serialize(SkillDocument document) => JsonSerializer.Serialize(document, Options);
-    public static SkillDocument Parse(string json)
+    public static SkillDocument Parse(string json) => Parse(json, out _);
+
+    public static SkillDocument Parse(string json, out IReadOnlyList<string> adjustments)
     {
+        var changes = new List<string>();
         using var parsed = JsonDocument.Parse(json);
         if (parsed.RootElement.ValueKind != JsonValueKind.Object || !parsed.RootElement.TryGetProperty("data", out _)) throw new JsonException("根節點需要 data 陣列。");
         var data = parsed.RootElement.GetProperty("data");
@@ -24,12 +27,18 @@ public static string Serialize(SkillDocument document) => JsonSerializer.Seriali
             foreach (var skill in binding.Process)
             {
                 if (skill is null || skill.SkillName is null || skill.CooldownCheck is null || skill.TemplateFile is null || skill.CastKey is null
-                    || skill.Status is not ("Y" or "A") || skill.CdSec < 0)
-                    throw new JsonException("技能文字不可為 null；status 必須為 Y 或 A；cd_sec 不可為負數。");
+                    || skill.Status is not ("Y" or "A"))
+                    throw new JsonException("技能文字不可為 null；status 必須為 Y 或 A。");
+                try
+                {
+                    if (SkillValueLimits.Normalize(skill) is { } adjustment) changes.Add(adjustment);
+                }
+                catch (ArgumentException ex) { throw new JsonException(ex.Message, ex); }
                 if (skill.TemplateFile.Length > 0 && (skill.TemplateFile.IndexOfAny(['/', '\\', ':']) >= 0 || skill.TemplateFile is "." or ".."))
                     throw new JsonException("template_file 只保存樣版檔名，不可包含資料夾或完整路徑。");
             }
         }
+        adjustments = changes.AsReadOnly();
         return result;
     }
 

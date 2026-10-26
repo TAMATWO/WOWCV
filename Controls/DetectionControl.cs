@@ -197,10 +197,11 @@ public sealed partial class DetectionControl : UserControl
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         try
         {
-            Configuration.Import(File.ReadAllText(dialog.FileName));
+            Configuration.Import(File.ReadAllText(dialog.FileName), out var adjustments);
             var document = Configuration.Read()!;
             configurationPreview.Text = SkillDocumentService.Serialize(document);
             configStatus.Text = $"{Path.GetFileName(dialog.FileName)} · {document.Data.Count} 組按鍵 · {document.Data.Sum(binding => binding.Process.Count)} 個技能";
+            if (adjustments.Count > 0) configStatus.Text += $" · {adjustments.Count} 個 cd_sec 已四捨五入（僅暫存，原檔未修改）";
             appConfiguration = appConfiguration with { SkillFlowPath = dialog.FileName };
             ClearConfigurationWarnings("技能流程檔");
             QueueConfigurationSave();
