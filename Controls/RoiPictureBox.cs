@@ -31,6 +31,7 @@ public sealed partial class RoiPictureBox : PictureBox
 
     public void SetTrackedBounds(Rectangle? region, bool matches)
     {
+        if (trackedBounds == region && trackedMatches == matches) return;
         trackedBounds = region; trackedMatches = matches; Invalidate();
     }
 
@@ -55,7 +56,9 @@ public sealed partial class RoiPictureBox : PictureBox
 
     public void SetSampleMarkers(IEnumerable<(Point Point, bool Matches, int Number)> markers)
     {
-        sampleMarkers = markers.ToArray(); Invalidate();
+        var next = markers.ToArray();
+        if (sampleMarkers.SequenceEqual(next)) return;
+        sampleMarkers = next; Invalidate();
     }
 
     public RoiPictureBox()

@@ -189,39 +189,40 @@ internal static class SkillTrackingTests
         var editor = new SkillEditorControl { Dock = DockStyle.Fill }; host.Controls.Add(editor); host.Show();
         editor.SetTemplateFolder(folder);
         Find<Button>(editor).Single(button => button.Text == "新增技能").PerformClick();
-        var images = Find<TextBox>(editor).Single(control => control.Name == "TemplateFileInput");
-        var picker = Find<Button>(editor).Single(control => control.Name == "SelectTemplateImage");
-        var key = Find<TextBox>(editor).Single(control => control.Name == "CastKeyInput");
-        check(images.ReadOnly && picker.Enabled && editor.TemplateFolderPath == folder, "Editor offers a file picker with a read-only bound filename");
+        var grid = SkillEditorUi.Grid(editor); grid.EndEdit();
+        string skillName = (string)grid.Rows[0].Cells["SkillName"].Value!;
+        check(grid.Columns["Template"]!.ReadOnly && !grid.Columns["PickTemplate"]!.ReadOnly && editor.TemplateFolderPath == folder,
+            "Editor offers a row image picker with a read-only bound filename");
         typeof(SkillEditorControl).GetMethod("BindTemplateImage", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(editor, [Path.Combine(folder, "skill.png")]); key.Text = "Ctrl+1";
+            .Invoke(editor, [Path.Combine(folder, "skill.png")]);
+        SkillEditorUi.Edit(editor, skillName, "CastKey", "Ctrl+1");
         string serialized = EditorText(editor);
         var entry = SkillDocumentService.Parse(serialized).Data[0].Process[0];
-        check(entry.TemplateFile == "skill.png" && entry.CastKey == "Ctrl+1", "Editor binds the selected image and records a separate casting key");
+        check(entry.TemplateFile == "skill.png" && entry.CastKey == "Ctrl+1", "Editor binds the image and directly records a separate casting key");
         var runtime = new RuntimeConfiguration(); runtime.Import(serialized);
-        key.Text = "2";
-        check(runtime.Bindings.Items.Single().CastKey == "Ctrl+1", "Editing bindings never changes an already imported runtime flow");
+        SkillEditorUi.Edit(editor, skillName, "CastKey", "2");
+        check(runtime.Bindings.Items.Single().CastKey == "Ctrl+1", "Editing bindings never changes an imported runtime flow");
         Find<Button>(editor).Single(button => button.Text == "修改前（復原）").PerformClick();
-        check(key.Text == "Ctrl+1", "Undo restores the casting-key binding");
+        check((string)grid.Rows[0].Cells["CastKey"].Value! == "Ctrl+1", "Undo restores the casting-key binding");
         Find<Button>(editor).Single(button => button.Text == "修改後（重做）").PerformClick();
-        check(key.Text == "2", "Redo restores the edited casting key");
+        check((string)grid.Rows[0].Cells["CastKey"].Value! == "2", "Redo restores the edited casting key");
         string before = EditorText(editor);
         editor.SetTemplateFolder(Path.Combine(directory, "missing-folder"));
-        check(EditorText(editor) == before && images.Text == "skill.png" && !picker.Enabled, "Missing image folders preserve binding data and disable selection until a folder is loaded");
+        check(EditorText(editor) == before && (string)grid.Rows[0].Cells["Template"].Value! == "skill.png"
+            && grid.Columns["PickTemplate"]!.ReadOnly, "Missing image folders preserve binding data and disable image selection");
         editor.SetTemplateFolder(folder);
         try
         {
             typeof(SkillEditorControl).GetMethod("BindTemplateImage", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(editor, [Path.Combine(directory, "outside.png")]);
-            check(false, "File picker rejects images outside the configured template folder");
+            check(false, "Image binding rejects outside-folder files");
         }
         catch (TargetInvocationException ex) when (ex.InnerException is ArgumentException)
-        { check(EditorText(editor) == before, "File picker rejects outside-folder bindings without altering the document"); }
-        Find<Button>(editor).Single(control => control.Name == "ClearTemplateImage").PerformClick();
-        check(images.Text.Length == 0, "Clear image binding is available next to the picker");
+        { check(EditorText(editor) == before, "Outside-folder bindings leave the document unchanged"); }
+        SkillEditorUi.ClickCell(editor, skillName, "ClearTemplate");
+        check((string)grid.Rows[0].Cells["Template"].Value! == "", "The row clear button removes its image binding");
         Find<Button>(editor).Single(button => button.Text == "修改前（復原）").PerformClick();
-        check(images.Text == "skill.png", "Undo restores a cleared image binding");
-        var scroll = Find<FlowLayoutPanel>(editor).Single(panel => panel.Controls.Contains(key)); scroll.ScrollControlIntoView(key);
+        check((string)grid.Rows[0].Cells["Template"].Value! == "skill.png", "Undo restores a cleared row image binding");
         using var image = new Bitmap(host.Width, host.Height); host.DrawToBitmap(image, new Rectangle(Point.Empty, image.Size));
         image.Save(Path.Combine(directory, "binding-editor.png"));
         host.Close();
@@ -246,6 +247,7 @@ internal static class SkillTrackingTests
         Find<Button>(detection).Single(button => button.Text == "開始偵測").PerformClick();
         WaitFor(() => table.Rows.Count == 1 && table.Rows[0].Tag is SkillObservation { Found: true });
         Find<TabControl>(detection).Single().SelectedTab = Find<TabControl>(detection).Single().TabPages.Cast<TabPage>().Single(page => page.Text == "已定位技能");
+        Find<Button>(detection).Single(button => button.Name == "ToggleTrackedDetails").PerformClick();
         check((string)table.Rows[0].Cells["技能"].Value! == "技能A" && (string)table.Rows[0].Cells["施放鍵"].Value! == "1",
             "Located-skill UI displays skill identity and the stored casting key");
         check(table.Font.SizeInPoints == 12 && table.Columns["縮圖"]!.Index < table.Columns["技能"]!.Index
@@ -254,6 +256,34 @@ internal static class SkillTrackingTests
             "Located skills use 12pt text with a thumbnail before skill identity and a full template-name tooltip");
         check(Find<DataGridView>(detection).Single(control => control.Name == "TrackedSkillDetails").Rows.Count == 5,
             "Selecting a located skill displays five expected and actual RGB values");
+        var detailTable = Find<DataGridView>(detection).Single(control => control.Name == "TrackedSkillDetails");
+        var stableRow = table.Rows[0];
+        var stableDetail = detailTable.Rows[0];
+        table.CurrentCell = stableRow.Cells["施放鍵"];
+        table.Columns["技能"]!.Width = 173;
+        table.HorizontalScrollingOffset = 55;
+        int previousScroll = table.HorizontalScrollingOffset;
+        int detailChanges = 0;
+        detailTable.CellValueChanged += (_, _) => detailChanges++;
+        var snapshotField = typeof(DetectionControl).GetField("displayedSkills", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var update = typeof(DetectionControl).GetMethod("UpdateTrackedResults", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var showDetails = typeof(DetectionControl).GetMethod("ShowActiveDetails", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var snapshot = (SkillObservationSnapshot)snapshotField.GetValue(detection)!;
+        for (int index = 0; index < 20; index++)
+        {
+            update.Invoke(detection, [snapshot with { FrameId = snapshot.FrameId + index + 1 }]);
+            showDetails.Invoke(detection, null);
+        }
+        check(ReferenceEquals(stableRow, table.CurrentRow) && table.CurrentCell!.OwningColumn!.Name == "施放鍵"
+            && table.Columns["技能"]!.Width == 173 && table.HorizontalScrollingOffset == previousScroll,
+            "Repeated frames retain row identity, selected cell, custom width and scroll position");
+        check(ReferenceEquals(stableDetail, detailTable.Rows[0]) && detailChanges == 0,
+            "Unchanged five-point samples retain rows without rewriting cells");
+        var changed = snapshot with { Items = [snapshot.Items[0] with { State = SkillTrackingState.NotMatched, Reason = "刷新驗證" }] };
+        update.Invoke(detection, [changed]);
+        check(ReferenceEquals(stableRow, table.Rows[0]) && (string)table.Rows[0].Cells["狀態"].Value! == "未命中",
+            "A changed match updates the existing row in place");
+        update.Invoke(detection, [snapshot]);
         using (var image = Frame(template, flash: true)) Cv2.ImWrite(source, image);
         Find<Button>(detection).Single(button => button.Text == "重新偵測").PerformClick();
         WaitFor(() => table.Rows.Count == 1 && table.Rows[0].Tag is SkillObservation { Found: true });

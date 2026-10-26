@@ -16,11 +16,9 @@ public sealed partial class DetectionControl
     private void InitializeCastingControls(TableLayoutPanel host)
     {
         triggerMode.Items.AddRange(["按住（後按生效）", "切換啟動／停止"]); triggerMode.SelectedIndex = 0;
-        var toolbar = new FlowLayoutPanel { Name = "CastingToolbar", Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(5) };
-        toolbar.Controls.AddRange([castingEnabled, triggerMode,
-            new Label { Text = "共用間隔 ms", AutoSize = true }, castInterval,
-            new Label { Text = "按鍵持續 ms", AutoSize = true }, keyHold]);
-        host.RowCount = 2; host.Controls.Add(toolbar, 0, 1);
+        host.Controls.Add(SettingField("觸發模式", triggerMode));
+        host.Controls.Add(SettingField("共用間隔 ms", castInterval));
+        host.Controls.Add(SettingField("按鍵持續 ms", keyHold));
         castingEnabled.CheckedChanged += (_, _) =>
         {
             if (updatingCasting) return;

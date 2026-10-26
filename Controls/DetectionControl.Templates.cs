@@ -14,7 +14,7 @@ public sealed partial class DetectionControl
         var column = new DataGridViewImageColumn
         {
             Name = "縮圖", HeaderText = "縮圖", ImageLayout = DataGridViewImageCellLayout.Normal,
-            Width = 50, MinimumWidth = 44, AutoSizeMode = DataGridViewAutoSizeColumnMode.None,
+            Width = 55, MinimumWidth = 50, AutoSizeMode = DataGridViewAutoSizeColumnMode.None,
             DefaultCellStyle = new DataGridViewCellStyle { NullValue = null, Padding = new Padding(1), Alignment = DataGridViewContentAlignment.MiddleCenter }
         };
         table.Columns.Insert(0, column);

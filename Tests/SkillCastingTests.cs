@@ -305,7 +305,8 @@ internal static class SkillCastingTests
             var interval = Find<NumericUpDown>(detection).Single(control => control.Name == "CastingInterval");
             var hold = Find<NumericUpDown>(detection).Single(control => control.Name == "CastingKeyHold");
             var notice = Find<Label>(detection).Single(control => control.Name == "CastingStatus");
-            check(!Find<SplitContainer>(detection).Single().Bounds.IntersectsWith(notice.Bounds),
+            var monitor = Find<SplitContainer>(detection).Single(control => control.Name == "MonitorSplit");
+            check(!monitor.RectangleToScreen(monitor.ClientRectangle).IntersectsWith(notice.RectangleToScreen(notice.ClientRectangle)),
                 "Casting status is visible outside the preview area");
             check(!enable.Checked && mode.SelectedIndex == 1 && interval.Value == 250 && hold.Value == 45,
                 "Main UI restores casting parameters while leaving casting disabled");

@@ -147,9 +147,14 @@ public sealed partial class DetectionControl
     {
         if (configurationStore.HasSaved) configurationWarnings.RemoveAll(warning => warning.StartsWith("配置未載入"));
         var error = configurationStore.LastError;
+        sourceStatus.Text = $"樣版：{(templateFolder is null ? "尚未載入" : Path.GetFileName(templateFolder))}\n流程：{(appConfiguration.SkillFlowPath is null ? "尚未匯入" : Path.GetFileName(appConfiguration.SkillFlowPath))}";
         string notice = error ?? (configurationWarnings.Count > 0 ? string.Join("；", configurationWarnings) : "修改設定後自動保存；下次啟動恢復，不自動開始偵測");
         persistenceStatus.ForeColor = error is not null || configurationWarnings.Count > 0 ? Color.DarkRed : Color.DarkSlateGray;
-        persistenceStatus.Text = $"配置：{configurationStore.FilePath}\n{notice}";
+        persistenceStatus.Text = notice;
+        configurationPathStatus.Text = $"配置：{configurationStore.FilePath}";
+        if (workbenchTips.GetToolTip(persistenceStatus) != notice) workbenchTips.SetToolTip(persistenceStatus, notice);
+        string references = $"樣版：{templateFolder ?? "尚未載入"}\n流程：{appConfiguration.SkillFlowPath ?? "尚未匯入"}";
+        if (workbenchTips.GetToolTip(sourceStatus) != references) workbenchTips.SetToolTip(sourceStatus, references);
     }
 
     private void ClearConfigurationWarnings(params string[] prefixes) => configurationWarnings.RemoveAll(warning => prefixes.Any(prefix => warning.StartsWith(prefix)));

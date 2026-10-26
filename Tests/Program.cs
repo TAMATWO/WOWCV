@@ -33,6 +33,7 @@ internal static class Program
             TestPixelResultsUi(root);
             SkillTrackingTests.Run(root, Check);
             SkillEditorDeletionTests.Run(root, Check);
+            SkillEditorGridTests.Run(root, Check);
             SkillValueLimitTests.Run(root, Check);
             SkillCastingTests.Run(root, Check);
             Console.WriteLine($"PASS: {checks} checks. Artifacts: {root}");
@@ -284,18 +285,45 @@ internal static class Program
         var detection = (DetectionControl)tabs.TabPages[0].Controls[0];
         var toolbar = FindControls<FlowLayoutPanel>(detection).Single(control => control.Name == "DetectionToolbar");
         Check(toolbar.Controls.Cast<Control>().All(control => control.Bottom <= toolbar.ClientSize.Height),
-            "Main toolbar wraps without clipping at minimum window size");
+            "Main toolbar stays in one row at minimum window size");
+        Check(!toolbar.WrapContents && FindControls<TabControl>(detection).Single().SelectedTab!.Text == "已定位技能",
+            "Monitor defaults to located skills and a stable command bar");
+        var settings = FindControls<Panel>(detection).Single(control => control.Name == "DetectionSettings");
+        Check(settings.Width == 240 && settings.AutoScroll, "Settings use a scrollable 240px sidebar");
+        FindControls<Button>(detection).Single(button => button.Text == "收合設定").PerformClick();
+        Check(!settings.Visible, "Settings sidebar collapses");
+        FindControls<Button>(detection).Single(button => button.Text == "展開設定").PerformClick();
         Check(FindControls<NumericUpDown>(detection).Single(control => control.Name == "ProcessScale").Value == 1,
             "Processing scale defaults to 1.00 in the main UI");
         var pixelControl = FindControls<PixelVerificationControl>(detection).Single();
         Check(pixelControl.GetOptions() is { Enabled: true, RgbTolerance: 0, MinimumMatches: 5 }, "UI defaults to exact five-point verification");
         var rightTabs = FindControls<TabControl>(detection).Single();
-        rightTabs.SelectedTab = rightTabs.TabPages.Cast<TabPage>().Single(page => page.Text == "五點設定");
+        FindControls<Button>(detection).Single(button => button.Text == "展開五點設定").PerformClick();
         pixelControl.ApplyOptions(new() { RgbTolerance = 3, MinimumMatches = 4, Up = new(-1, -17) });
         Check(pixelControl.GetOptions() is { RgbTolerance: 3, MinimumMatches: 4, Up: { X: -1, Y: -17 } }, "UI supports independent editable offsets and tolerance");
+        settings.ScrollControlIntoView(pixelControl);
         using var samplingImage = new Bitmap(form.Width, form.Height);
         form.DrawToBitmap(samplingImage, new Rectangle(System.Drawing.Point.Empty, samplingImage.Size));
         samplingImage.Save(Path.Combine(root, "five-point-settings.png"));
+        float previousScale = 1;
+        foreach (float scale in new[] { 1.25f, 1.5f })
+        {
+            // Exercise WinForms scaling without changing the machine's display configuration.
+            form.Scale(new SizeF(scale / previousScale, scale / previousScale));
+            previousScale = scale;
+            form.PerformLayout();
+            var monitor = FindControls<SplitContainer>(detection).Single(control => control.Name == "MonitorSplit");
+            Check(toolbar.Controls.Cast<Control>().All(control => toolbar.ClientRectangle.Contains(control.Bounds))
+                && monitor.Panel1.Width >= monitor.Panel1MinSize && monitor.Panel2.Width >= monitor.Panel2MinSize,
+                $"Monitor command bar and preview/results panes fit at {scale:P0} simulated scaling");
+            var diagnostics = FindControls<Panel>(detection).Single(control => control.Name == "DetectionDiagnostics");
+            FindControls<Button>(detection).Single(button => button.Text == "展開診斷資訊").PerformClick();
+            Check(diagnostics.Visible && monitor.Height > 200, "Diagnostics expand while leaving room for the preview");
+            FindControls<Button>(detection).Single(button => button.Text == "收合診斷資訊").PerformClick();
+            using var scaled = new Bitmap(form.Width, form.Height);
+            form.DrawToBitmap(scaled, new Rectangle(System.Drawing.Point.Empty, scaled.Size));
+            scaled.Save(Path.Combine(root, $"monitor-scale-{(int)(scale * 100)}.png"));
+        }
     }
     private static IEnumerable<T> FindControls<T>(Control parent) where T : Control => parent.Controls.Cast<Control>()
         .SelectMany(child => (child is T match ? new[] { match } : Array.Empty<T>()).Concat(FindControls<T>(child)));
@@ -322,6 +350,10 @@ internal static class Program
         var table = FindControls<DataGridView>(detection).Single(grid => grid.Name == "DetectionResults");
         var details = FindControls<DataGridView>(detection).Single(grid => grid.Name == "PixelSampleDetails");
         WaitFor(() => table.Rows.Count == 2);
+        Check(details.Rows.Count == 0, "Collapsed point details are not populated on new frames");
+        var tabs = FindControls<TabControl>(detection).Single();
+        tabs.SelectedTab = tabs.TabPages.Cast<TabPage>().Single(page => page.Text == "辨識結果");
+        FindControls<Button>(detection).Single(button => button.Name == "ToggleSampleDetails").PerformClick();
         Check(table.Rows.Cast<DataGridViewRow>().All(row => row.Tag is DetectionRow { Found: true }),
             "Live UI distinguishes successful candidates and final hits");
         var longRow = table.Rows.Cast<DataGridViewRow>().Single(row => ((DetectionRow)row.Tag!).Template == longTemplateName);

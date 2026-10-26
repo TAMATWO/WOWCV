@@ -20,10 +20,10 @@ public sealed partial class DetectionControl : UserControl
     private readonly Label inputStatus = new() { Dock = DockStyle.Bottom, Height = 25, Text = "Raw Input 尚未啟動" };
     private readonly Label configStatus = new() { Dock = DockStyle.Top, Height = 25, Text = "尚未匯入執行設定；編輯器內容不會自動套用。" };
     private readonly TextBox configurationPreview = new() { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both };
-    private readonly DataGridView results = new() { Name = "DetectionResults", Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
+    private readonly DataGridView results = new BufferedResultGrid { Name = "DetectionResults", Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
         AllowUserToDeleteRows = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells, RowHeadersVisible = false,
         MultiSelect = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect };
-    private readonly DataGridView sampleDetails = new() { Name = "PixelSampleDetails", Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
+    private readonly DataGridView sampleDetails = new BufferedResultGrid { Name = "PixelSampleDetails", Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
         AllowUserToDeleteRows = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells, RowHeadersVisible = false };
     private readonly Label sampleStatus = new() { Name = "PixelSampleStatus", Dock = DockStyle.Top, Height = 52, Text = "選取一筆結果，查看五點位置與 RGB。" };
     private readonly System.Windows.Forms.Timer refresh = new() { Interval = 100 };
@@ -42,56 +42,18 @@ public sealed partial class DetectionControl : UserControl
         configurationStore = new WorkbenchConfigurationStore(configurationPath);
         threshold.Value = (decimal)appConfiguration.Search.Threshold;
         processScale.Value = (decimal)appConfiguration.Search.ProcessScale;
-        var toolbar = new FlowLayoutPanel { Name = "DetectionToolbar", Dock = DockStyle.Fill, AutoSize = true, Padding = new Padding(5), WrapContents = true };
-        Button Add(string text, Action action)
-        {
-            var button = new Button { Text = text, AutoSize = true };
-            button.Click += (_, _) => action(); toolbar.Controls.Add(button); return button;
-        }
-        toolbar.Controls.Add(screens);
-        Add("切換螢幕來源", () => ChangeSource(null));
-        Add("靜態圖片", SelectImage);
-        Add("載入樣版資料夾", SelectTemplates);
-        toolbar.Controls.Add(new Label { Text = "門檻", AutoSize = true }); toolbar.Controls.Add(threshold);
-        toolbar.Controls.Add(new Label { Text = "處理倍率", AutoSize = true }); toolbar.Controls.Add(processScale);
-        toolbar.Controls.Add(multiScale); toolbar.Controls.Add(useRoi); toolbar.Controls.Add(pixelSettings.VerificationToggle);
-        Add("框選偵測範圍", () =>
-        {
-            preview.SelectionEnabled = !preview.SelectionEnabled;
-            preview.Cursor = preview.SelectionEnabled ? Cursors.Cross : Cursors.Default;
-            UpdatePreviewViewport();
-            status.Text = preview.SelectionEnabled ? "請在預覽上拖曳框選範圍。" : "已取消框選。";
-        });
-        Add("清除範圍", () => preview.ClearSelection());
-        toolbar.Controls.Add(toggle);
-        Add("重新偵測", Configure);
-        Add("重新定位技能", () => { trackingResetRevision++; Configure(save: false); });
-        Add("匯入 TXT / JSON 暫存", ImportConfiguration);
-        var toolsHost = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 1, RowCount = 1 };
-        toolsHost.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); toolsHost.Controls.Add(toolbar);
-        InitializeCastingControls(toolsHost);
-        var split = new SplitContainer { Dock = DockStyle.Fill, Size = new Size(1300, 650), SplitterDistance = 800 };
-        split.Panel1.Controls.Add(preview);
-        var right = new TabControl { Dock = DockStyle.Fill };
-        var matches = new TabPage("辨識結果");
-        var resultLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        resultLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        resultLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 65)); resultLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 35));
-        var detailPanel = new Panel { Dock = DockStyle.Fill };
-        detailPanel.Controls.Add(sampleDetails); detailPanel.Controls.Add(sampleStatus);
-        resultLayout.Controls.Add(results, 0, 0); resultLayout.Controls.Add(detailPanel, 0, 1); matches.Controls.Add(resultLayout);
-        var config = new TabPage("執行設定暫存"); config.Controls.Add(configurationPreview); config.Controls.Add(configStatus);
-        var sampling = new TabPage("五點設定"); sampling.Controls.Add(pixelSettings);
-        right.TabPages.AddRange([matches, sampling, config]); split.Panel2.Controls.Add(right);
-        InitializeTrackingPage(right);
-        Add("五點位置／容差設定", () => right.SelectedTab = sampling);
-        Controls.Add(split); Controls.Add(toolsHost); Controls.Add(castingStatus); Controls.Add(status); Controls.Add(inputStatus); Controls.Add(persistenceStatus);
+        InitializeWorkbench();
         foreach (var name in new[] { "樣版", "候選通過", "最終命中", "RGB符合點數", "原因", "相似度", "SqDiffNormed", "樣版倍率", "中心 X", "中心 Y", "寬", "高", "位置校正", "MSE" })
             results.Columns.Add(name, name);
         InitializeTemplateResultDisplay(results);
         var reasonColumn = results.Columns["原因"]!;
         reasonColumn.Width = 190; reasonColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
         foreach (var name in new[] { "點", "樣版位置", "畫面位置", "樣版 RGB", "實際 RGB", "符合" }) sampleDetails.Columns.Add(name, name);
+        StabilizeColumns(results); StabilizeColumns(sampleDetails);
+        StabilizeColumns(trackedResults); StabilizeColumns(trackedDetails);
+        results.Columns["最終命中"]!.DisplayIndex = 2;
+        results.Columns["RGB符合點數"]!.DisplayIndex = 3;
+        trackedResults.Columns["樣版"]!.DisplayIndex = trackedResults.Columns.Count - 1;
         results.CurrentCellChanged += (_, _) => { if (!updatingResults) ShowActiveDetails(); };
         pixelSettings.OptionsChanged += (_, _) => Configure();
         foreach (var screen in Screen.AllScreens) screens.Items.Add($"{screen.DeviceName} · {screen.Bounds.Width}×{screen.Bounds.Height}");
@@ -219,34 +181,21 @@ public sealed partial class DetectionControl : UserControl
             else
             {
                 var previous = preview.Image; preview.Image = value.Preview; previous?.Dispose();
-                string? selectedTemplate = (results.CurrentRow?.Tag as DetectionRow)?.Template;
-                int selectedColumn = results.CurrentCell?.ColumnIndex ?? 0;
-                int horizontalOffset = results.HorizontalScrollingOffset;
-                int firstVisibleRow = results.FirstDisplayedScrollingRowIndex;
                 updatingResults = true;
                 try
                 {
-                    results.Rows.Clear();
-                    foreach (var row in value.Rows)
-                    {
-                        int index = results.Rows.Add(GetTemplateThumbnail(row.Template)!, ShortTemplateName(row.Template), row.CandidatePassed ? "是" : "否", row.Found ? "是" : "否",
-                            PointCount(row.PixelVerification), row.PixelVerification.Reason,
-                            row.Similarity.ToString("F6"), row.Difference.ToString("F6"),
-                            row.Scale.ToString("F2"), row.X, row.Y, row.Width, row.Height,
-                            row.PositionRefined ? "已校正" : "—", row.Mse.ToString("F4"));
-                        results.Rows[index].Tag = row;
-                        results.Rows[index].Cells["樣版"].ToolTipText = row.Template;
-                        results.Rows[index].Cells["縮圖"].ToolTipText = row.Template;
-                        if (row.Template == selectedTemplate) results.CurrentCell = results.Rows[index].Cells[selectedColumn];
-                    }
-                    if (results.Rows.Count > 0 && firstVisibleRow >= 0)
-                        results.FirstDisplayedScrollingRowIndex = Math.Min(firstVisibleRow, results.Rows.Count - 1);
-                    results.HorizontalScrollingOffset = horizontalOffset;
+                    UpdateRows(results, value.Rows, row => row.Template, row =>
+                    [
+                        GetTemplateThumbnail(row.Template), ShortTemplateName(row.Template), row.CandidatePassed ? "是" : "否", row.Found ? "是" : "否",
+                        PointCount(row.PixelVerification), row.PixelVerification.Reason,
+                        row.Similarity.ToString("F6"), row.Difference.ToString("F6"), row.Scale.ToString("F2"),
+                        row.X, row.Y, row.Width, row.Height, row.PositionRefined ? "已校正" : "—", row.Mse.ToString("F4")
+                    ]);
                 }
                 finally { updatingResults = false; }
                 UpdateTrackedResults(value.Skills); ShowActiveDetails();
-                status.Text = $"{(imagePath is null ? "螢幕絕對中心座標" : "圖片中心座標")} · {value.Status} · {(detecting ? "偵測中" : "僅預覽")}\n" +
-                    $"像素 {value.SourcePixels:N0} → {value.ProcessPixels:N0} · 處理 {value.ElapsedMs:F1} ms · 候選 {value.Rows.Count(row => row.CandidatePassed)} / 樣版命中 {value.Rows.Count(row => row.Found)} / 技能框命中 {value.Skills.Items.Count(item => item.Found)}";
+                status.Text = $"{(detecting ? "偵測中" : "僅預覽")} · 樣版命中 {value.Rows.Count(row => row.Found)} / {value.Rows.Count} · 技能框命中 {value.Skills.Items.Count(item => item.Found)} · {value.Status}";
+                performanceStatus.Text = $"{(imagePath is null ? "螢幕絕對中心座標" : "圖片中心座標")}\n像素 {value.SourcePixels:N0} → {value.ProcessPixels:N0} · 處理 {value.ElapsedMs:F1} ms\n影格 #{value.Skills.FrameId} · 擷取 {value.Skills.CapturedAt.ToLocalTime():HH:mm:ss.fff}";
                 preview.Invalidate();
             }
         }
@@ -261,22 +210,20 @@ public sealed partial class DetectionControl : UserControl
 
     private void ShowSampleDetails()
     {
-        sampleDetails.Rows.Clear();
         if (results.CurrentRow?.Tag is not DetectionRow row)
         {
+            if (sampleDetailsExpanded) sampleDetails.Rows.Clear();
             sampleStatus.Text = "選取一筆結果，查看五點位置與 RGB。"; preview.SetSampleMarkers([]); return;
         }
-        sampleStatus.Text = $"{row.Template} · {row.PixelVerification.Reason}\n畫面位置為預覽圖片內座標；上表中心座標包含螢幕偏移。";
-        foreach (var point in row.PixelVerification.Samples)
-            sampleDetails.Rows.Add(point.Number, $"{point.TemplatePoint.X},{point.TemplatePoint.Y}",
-                $"{point.FramePoint.X},{point.FramePoint.Y}", point.Expected?.ToString() ?? "越界",
-                point.Actual?.ToString() ?? "越界", point.Matches ? "是" : "否");
+        if (sampleDetailsExpanded)
+            sampleStatus.Text = $"{row.Template} · {row.PixelVerification.Reason}\n畫面位置為預覽圖片內座標；上表中心座標包含螢幕偏移。";
+        if (sampleDetailsExpanded) UpdatePointDetails(sampleDetails, row.PixelVerification);
         preview.SetSampleMarkers(row.PixelVerification.Samples.Where(point => point.Actual is not null)
             .Select(point => (point.FramePoint, point.Matches, point.Number)));
     }
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { StopServices(); refresh.Dispose(); results.Rows.Clear(); trackedResults.Rows.Clear(); DisposeTemplateThumbnails(); }
+        if (disposing) { StopServices(); refresh.Dispose(); workbenchTips.Dispose(); results.Rows.Clear(); trackedResults.Rows.Clear(); DisposeTemplateThumbnails(); }
         base.Dispose(disposing);
         if (disposing) resultTableFont.Dispose();
     }

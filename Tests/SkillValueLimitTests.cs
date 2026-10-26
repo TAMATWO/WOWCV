@@ -60,28 +60,27 @@ internal static class SkillValueLimitTests
         host.Controls.Add(editor); host.Show();
         var parsed = SkillDocumentService.Parse(File.ReadAllText(path), out var adjustments);
         Invoke(editor, "ApplyImportedDocument", parsed, adjustments, "legacy.json");
-        var priority = Find<NumericUpDown>(editor).Single(input => input.Name == "PriorityInput");
-        var weight = Find<NumericUpDown>(editor).Single(input => input.Name == "WeightInput");
-        var cooldown = Find<NumericUpDown>(editor).Single(input => input.Name == "CooldownInput");
+        var priority = Find<NumericUpDown>(editor).Single(input => input.Name == "BatchPriority");
+        var weight = Find<NumericUpDown>(editor).Single(input => input.Name == "BatchWeight");
+        var cooldown = Find<NumericUpDown>(editor).Single(input => input.Name == "BatchCooldown");
         check(priority.Minimum == 1 && priority.Maximum == 10 && weight.Minimum == 1 && weight.Maximum == 100
             && cooldown.Minimum == 0 && cooldown.Maximum == 600 && new[] { priority, weight, cooldown }.All(input => input.DecimalPlaces == 0 && input.Increment == 1),
-            "All editor numeric fields enforce the specified integer ranges and unit steps");
+            "Batch numeric inputs enforce integer ranges and unit steps");
         check(Field<Label>(editor, "footer").Text.Contains("四捨五入") && Field<string>(editor, "saved") != Snapshot(editor)
-            && File.ReadAllText(path) == original, "Rounded editor imports are marked unsaved and leave the source file untouched");
-        priority.Value = 10; weight.Value = 1; cooldown.Value = 600;
-        check(Find<TrackBar>(editor).Single(slider => slider.Name == "PrioritySlider").Value == 10
-            && Find<TrackBar>(editor).Single(slider => slider.Name == "WeightSlider").Value == 1
-            && Find<TrackBar>(editor).Single(slider => slider.Name == "CooldownSlider").Value == 600,
-            "Sliders follow the same unscaled integer values as numeric inputs");
-        cooldown.Value = 15.5m;
-        check(cooldown.Value == 16 && Read(editor).Data[0].Process[0].CdSec == 16,
-            "A fractional numeric value is normalized before it enters editor history");
+            && File.ReadAllText(path) == original, "Rounded imports are unsaved and leave the source file untouched");
+        check(SkillEditorUi.Edit(editor, "數值技能", "Priority", "10") && SkillEditorUi.Edit(editor, "數值技能", "Weight", "1")
+            && SkillEditorUi.Edit(editor, "數值技能", "Cooldown", "600"), "Grid commits valid numeric boundaries directly");
+        foreach (var (column, value) in new[] { ("Priority", "11"), ("Weight", "0"), ("Cooldown", "601"), ("Cooldown", "15.5"), ("Cooldown", "abc") })
+        {
+            check(!SkillEditorUi.Edit(editor, "數值技能", column, value) && Read(editor).Data[0].Process[0].CdSec == 600,
+                $"Grid rejects invalid {column} input {value} before changing the document");
+            SkillEditorUi.Grid(editor).CancelEdit(); Application.DoEvents();
+        }
+        SkillEditorUi.Edit(editor, "數值技能", "Cooldown", "16");
         Find<Button>(editor).Single(button => button.Text == "修改前（復原）").PerformClick();
-        check(cooldown.Value == 600, "One undo restores the previous integer cooldown");
+        check(Read(editor).Data[0].Process[0].CdSec == 600, "Undo restores the previous integer cell value");
         Find<Button>(editor).Single(button => button.Text == "修改後（重做）").PerformClick();
-        check(cooldown.Value == 16, "One redo restores the rounded integer cooldown");
-        var slider = Find<TrackBar>(editor).Single(control => control.Name == "PrioritySlider"); slider.Value = 1;
-        check(priority.Value == 1 && Read(editor).Data[0].Process[0].Priority == 1, "Moving a slider updates the numeric field and stored skill");
+        check(Read(editor).Data[0].Process[0].CdSec == 16, "Redo restores the edited integer cell value");
         Invoke(editor, "SaveToFile", path);
         using (var saved = JsonDocument.Parse(File.ReadAllText(path)))
         {
@@ -95,12 +94,11 @@ internal static class SkillValueLimitTests
         }
         Find<Button>(editor).Single(button => button.Name == "DeleteSkill").PerformClick();
         Find<Button>(editor).Single(button => button.Name == "DeleteSkillBinding").PerformClick();
-        check(Read(editor).Data.Count == 0 && !priority.Enabled && priority.Value == 1 && weight.Value == 100 && cooldown.Value == 0,
-            "Deleting the final group leaves disabled fields at valid placeholder values");
+        check(Read(editor).Data.Count == 0 && SkillEditorUi.Grid(editor).Rows.Count == 0,
+            "Deleting the final group leaves an empty grid");
         Find<Button>(editor).Single(button => button.Text == "修改前（復原）").PerformClick();
         Find<Button>(editor).Single(button => button.Text == "修改前（復原）").PerformClick();
-        check(priority.Enabled && Read(editor).Data[0].Process[0].CdSec == 16,
-            "Undo after an empty document restores integer fields without range errors");
+        check(Read(editor).Data[0].Process[0].CdSec == 16, "Undo restores numeric values after an empty document");
         host.Close();
     }
 

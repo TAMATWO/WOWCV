@@ -11,21 +11,24 @@ public sealed class PixelVerificationControl : UserControl
     private readonly NumericUpDown tolerance = new() { Minimum = 0, Maximum = 255, Width = 80 };
     private readonly NumericUpDown minimum = new() { Minimum = 1, Maximum = 5, Value = 5, Width = 80 };
     private readonly NumericUpDown[] x = new NumericUpDown[5], y = new NumericUpDown[5];
-    private readonly Label fileStatus = new() { AutoSize = true, MaximumSize = new Size(480, 0), Text = "所有技能共用；辨識設定與技能流程檔分開保存。" };
+    private readonly Label fileStatus = new() { AutoSize = true, MaximumSize = new Size(180, 0), Text = "所有技能共用；辨識設定與技能流程檔分開保存。" };
     private bool updating;
     public event EventHandler? OptionsChanged;
 
     public PixelVerificationControl()
     {
         Dock = DockStyle.Fill; AutoScroll = true;
-        var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3, Padding = new Padding(12) };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3, Padding = new Padding(0) };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         void AddWide(Control control, int row) { layout.Controls.Add(control, 0, row); layout.SetColumnSpan(control, 3); }
-        AddWide(new Label { Text = "五點位置：相對於每張樣版中心的原始像素偏移。", AutoSize = true }, 0);
-        layout.Controls.Add(new Label { Text = "RGB 容差 ±", AutoSize = true }, 1, 1); layout.Controls.Add(tolerance, 2, 1);
-        layout.Controls.Add(new Label { Text = "至少通過點數", AutoSize = true }, 1, 2); layout.Controls.Add(minimum, 2, 2);
+        AddWide(new Label { Text = "五點位置：相對於每張樣版中心的原始像素偏移。", AutoSize = true, MaximumSize = new Size(180, 0) }, 0);
+        var toleranceLabel = new Label { Text = "RGB 容差 ±", AutoSize = true };
+        layout.Controls.Add(toleranceLabel, 0, 1); layout.SetColumnSpan(toleranceLabel, 2); layout.Controls.Add(tolerance, 2, 1);
+        var minimumLabel = new Label { Text = "至少通過點數", AutoSize = true };
+        layout.Controls.Add(minimumLabel, 0, 2); layout.SetColumnSpan(minimumLabel, 2); layout.Controls.Add(minimum, 2, 2);
+        tolerance.Width = minimum.Width = 60;
         layout.Controls.Add(new Label { Text = "取樣點", AutoSize = true }, 0, 3);
         layout.Controls.Add(new Label { Text = "X 偏移", AutoSize = true }, 1, 3);
         layout.Controls.Add(new Label { Text = "Y 偏移", AutoSize = true }, 2, 3);
@@ -42,13 +45,13 @@ public sealed class PixelVerificationControl : UserControl
         var save = new Button { Text = "匯出辨識設定", AutoSize = true };
         load.Click += (_, _) => Import(); save.Click += (_, _) => Export();
         buttons.Controls.AddRange([load, save]); AddWide(buttons, 9); AddWide(fileStatus, 10);
-        AddWide(new Label { Text = "RGB 容差是每個通道的允許差值。\n取樣越界會拒絕命中；不同尺寸不會縮放後比較。", AutoSize = true }, 11);
+        AddWide(new Label { Text = "RGB 容差是每個通道的允許差值。\n取樣越界會拒絕命中；不同尺寸不會縮放後比較。", AutoSize = true, MaximumSize = new Size(180, 0) }, 11);
         Controls.Add(layout);
         VerificationToggle.CheckedChanged += Changed; tolerance.ValueChanged += Changed; minimum.ValueChanged += Changed;
         ApplyOptions(new PixelVerificationOptions());
     }
 
-    private static NumericUpDown CreateOffset() => new() { Minimum = int.MinValue, Maximum = int.MaxValue, Width = 95 };
+    private static NumericUpDown CreateOffset() => new() { Minimum = int.MinValue, Maximum = int.MaxValue, Width = 60 };
     private void Changed(object? sender, EventArgs e) { if (!updating) OptionsChanged?.Invoke(this, EventArgs.Empty); }
     public PixelVerificationOptions GetOptions()
     {
