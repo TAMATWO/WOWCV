@@ -14,12 +14,17 @@ public sealed partial class DetectionControl
     private readonly List<string> configurationWarnings = [];
     private readonly Label persistenceStatus = new()
     {
-        Name = "PersistenceStatus", Dock = DockStyle.Bottom, Height = 38, AutoEllipsis = true
+        Name = "PersistenceStatus",
+        Dock = DockStyle.Bottom,
+        Height = 38,
+        AutoEllipsis = true
     };
-
     public string ConfigurationFilePath => configurationStore.FilePath;
     public string ConfigurationNotice => persistenceStatus.Text;
 
+    /// <summary>
+    /// 還原來源、辨識與流程設定；失效參照保留警告，啟動時不自動偵測或施放。
+    /// </summary>
     private void RestoreConfiguration()
     {
         applyingConfiguration = true;
@@ -27,10 +32,12 @@ public sealed partial class DetectionControl
         try
         {
             appConfiguration = configurationStore.Load(out var warning);
-            if (warning is not null) configurationWarnings.Add(warning);
+            if (warning is not null)
+                configurationWarnings.Add(warning);
             var source = appConfiguration.Source;
             var allScreens = Screen.AllScreens;
-            int index = Array.FindIndex(allScreens, screen => screen.DeviceName == source.ScreenDeviceName);
+            int index = Array.FindIndex(allScreens,
+                screen => screen.DeviceName == source.ScreenDeviceName);
             bool trustedSource = source.ScreenDeviceName is null || index >= 0;
             if (index < 0)
             {
@@ -38,9 +45,11 @@ public sealed partial class DetectionControl
                 if (source.ScreenDeviceName is not null && source.Kind == SourceKind.Screen)
                     configurationWarnings.Add("找不到原螢幕，已使用可用螢幕並停用原 ROI");
             }
+
             screens.SelectedIndex = allScreens.Length > 0 ? index : -1;
             Size sourceSize = allScreens.ElementAtOrDefault(index)?.Bounds.Size ?? Size.Empty;
-            if (sourceSize.IsEmpty && source.Kind == SourceKind.Screen) configurationWarnings.Add("找不到可用螢幕");
+            if (sourceSize.IsEmpty && source.Kind == SourceKind.Screen)
+                configurationWarnings.Add("找不到可用螢幕");
             imagePath = null;
             if (source.Kind == SourceKind.Image)
             {
@@ -51,14 +60,25 @@ public sealed partial class DetectionControl
                     try
                     {
                         using var image = Cv2.ImRead(path, ImreadModes.Color);
-                        if (image.Empty()) configurationWarnings.Add("靜態圖片無法解碼，暫用螢幕預覽");
-                        else { imagePath = path; sourceSize = new Size(image.Width, image.Height); trustedSource = true; }
+                        if (image.Empty())
+                            configurationWarnings.Add("靜態圖片無法解碼，暫用螢幕預覽");
+                        else
+                        {
+                            imagePath = path;
+                            sourceSize = new Size(image.Width, image.Height);
+                            trustedSource = true;
+                        }
                     }
-                    catch (Exception ex) when (ex is OpenCVException or IOException or UnauthorizedAccessException)
-                    { configurationWarnings.Add($"靜態圖片無法載入：{ex.Message}"); }
+                    catch (Exception ex) when (ex is OpenCVException or IOException
+                        or UnauthorizedAccessException)
+                    {
+                        configurationWarnings.Add($"靜態圖片無法載入：{ex.Message}");
+                    }
                 }
             }
-            templateFolder = ResolveExistingReference(source.TemplateFolderPath, directory: true, "樣版資料夾");
+
+            templateFolder = ResolveExistingReference(source.TemplateFolderPath, directory: true,
+                "樣版資料夾");
             threshold.Value = (decimal)appConfiguration.Search.Threshold;
             processScale.Value = (decimal)appConfiguration.Search.ProcessScale;
             multiScale.Checked = appConfiguration.Search.MultiScale;
@@ -68,13 +88,15 @@ public sealed partial class DetectionControl
             useRoi.Checked = appConfiguration.Search.UseRoi;
             if (appConfiguration.Search.Roi is { } roi)
             {
-                if (trustedSource && roi.Fits(sourceSize)) preview.RestoreSelection(new Rectangle(roi.X, roi.Y, roi.Width, roi.Height));
+                if (trustedSource && roi.Fits(sourceSize))
+                    preview.RestoreSelection(new Rectangle(roi.X, roi.Y, roi.Width, roi.Height));
                 else
                 {
                     useRoi.Checked = false;
                     configurationWarnings.Add("原 ROI 與目前來源尺寸不符或越界，請重新框選");
                 }
             }
+
             if (appConfiguration.SkillFlowPath is { Length: > 0 } flowPath)
             {
                 string? path = ResolveExistingReference(flowPath, directory: false, "技能流程檔");
@@ -85,56 +107,86 @@ public sealed partial class DetectionControl
                         Configuration.Import(File.ReadAllText(path), out var adjustments);
                         var document = Configuration.Read()!;
                         configurationPreview.Text = SkillDocumentService.Serialize(document);
-                        configStatus.Text = $"已恢復：{Path.GetFileName(path)} · {document.Data.Count} 組按鍵";
+                        configStatus.Text = $"已恢復：{Path.GetFileName(
+                            path)} · {document.Data.Count} 組按鍵";
                         if (adjustments.Count > 0)
                         {
                             configStatus.Text += $" · {adjustments.Count} 個 cd_sec 已四捨五入（原檔未修改）";
-                            configurationWarnings.Add($"技能流程檔：{adjustments.Count} 個 cd_sec 已四捨五入，僅套用至暫存，原檔未修改");
+                            configurationWarnings.Add(
+                                $"技能流程檔：{adjustments.Count} 個 cd_sec 已四捨五入，僅套用至暫存，原檔未修改");
                         }
                     }
-                    catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
-                    { configurationWarnings.Add($"技能流程檔未載入：{ex.Message}"); }
+                    catch (Exception ex) when (ex is JsonException or IOException
+                        or UnauthorizedAccessException)
+                    {
+                        configurationWarnings.Add($"技能流程檔未載入：{ex.Message}");
+                    }
                 }
             }
-            detecting = false; toggle.Text = "開始偵測";
+
+            detecting = false;
+            toggle.Text = "開始偵測";
         }
-        finally { applyingConfiguration = false; configurationReady = true; }
+        finally
+        {
+            applyingConfiguration = false;
+            configurationReady = true;
+        }
+
         TemplateFolderChanged?.Invoke(this, EventArgs.Empty);
-        UpdatePreviewViewport(); RefreshPersistenceStatus();
+        UpdatePreviewViewport();
+        RefreshPersistenceStatus();
     }
 
+    /// <summary>
+    /// 解析配置參照路徑，找不到檔案或資料夾時記錄可見警告。
+    /// </summary>
     private string? ResolveExistingReference(string? reference, bool directory, string label)
     {
         if (string.IsNullOrWhiteSpace(reference))
         {
-            if (label == "靜態圖片") configurationWarnings.Add("未指定靜態圖片，暫用螢幕預覽");
+            if (label == "靜態圖片")
+                configurationWarnings.Add("未指定靜態圖片，暫用螢幕預覽");
             return null;
         }
+
         try
         {
             string path = configurationStore.ResolveReference(reference);
-            if (directory ? Directory.Exists(path) : File.Exists(path)) return path;
+            if (directory ? Directory.Exists(path) : File.Exists(path))
+                return path;
             configurationWarnings.Add($"{label}不存在，請重新選擇：{reference}");
         }
-        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
-        { configurationWarnings.Add($"{label}路徑無效：{ex.Message}"); }
+        catch (Exception ex) when (ex is ArgumentException or IOException
+            or UnauthorizedAccessException)
+        {
+            configurationWarnings.Add($"{label}路徑無效：{ex.Message}");
+        }
+
         return null;
     }
 
+    /// <summary>
+    /// 收集目前介面設定並交由配置儲存服務延後保存。
+    /// </summary>
     private void QueueConfigurationSave()
     {
-        if (!configurationReady || applyingConfiguration || stopped) return;
+        if (!configurationReady || applyingConfiguration || stopped)
+            return;
         appConfiguration = appConfiguration with
         {
             Source = appConfiguration.Source with
             {
-                ScreenDeviceName = appConfiguration.Source.ScreenDeviceName
-                    ?? Screen.AllScreens.ElementAtOrDefault(screens.SelectedIndex)?.DeviceName
+                ScreenDeviceName =
+            appConfiguration.Source.ScreenDeviceName ?? Screen.AllScreens.ElementAtOrDefault(
+            screens.SelectedIndex)?.DeviceName
             },
             Search = appConfiguration.Search with
             {
-                Threshold = (double)threshold.Value, ProcessScale = (double)processScale.Value,
-                MultiScale = multiScale.Checked, UseRoi = useRoi.Checked
+                Threshold = (double)threshold.Value,
+                ProcessScale = (double)processScale.Value,
+                MultiScale = multiScale.Checked,
+                UseRoi = useRoi.Checked
             },
             Verification = pixelSettings.GetOptions(),
             Casting = GetCastingOptions()
@@ -143,26 +195,45 @@ public sealed partial class DetectionControl
         RefreshPersistenceStatus();
     }
 
+    /// <summary>
+    /// 更新配置保存結果、來源摘要與完整路徑提示。
+    /// </summary>
     private void RefreshPersistenceStatus()
     {
-        if (configurationStore.HasSaved) configurationWarnings.RemoveAll(warning => warning.StartsWith("配置未載入"));
+        if (configurationStore.HasSaved)
+            configurationWarnings.RemoveAll(warning => warning.StartsWith("配置未載入"));
         var error = configurationStore.LastError;
-        sourceStatus.Text = $"樣版：{(templateFolder is null ? "尚未載入" : Path.GetFileName(templateFolder))}\n流程：{(appConfiguration.SkillFlowPath is null ? "尚未匯入" : Path.GetFileName(appConfiguration.SkillFlowPath))}";
-        string notice = error ?? (configurationWarnings.Count > 0 ? string.Join("；", configurationWarnings) : "修改設定後自動保存；下次啟動恢復，不自動開始偵測");
-        persistenceStatus.ForeColor = error is not null || configurationWarnings.Count > 0 ? Color.DarkRed : Color.DarkSlateGray;
+        sourceStatus.Text = ($"樣版：" + $"{(templateFolder is null ? "尚未載入"
+            : Path.GetFileName(templateFolder))}" + $"\n流程："
+            + $"{(appConfiguration.SkillFlowPath is null ? "尚未匯入"
+            : Path.GetFileName(appConfiguration.SkillFlowPath))}");
+        string notice = error ?? (configurationWarnings.Count > 0 ? string.Join("；",
+            configurationWarnings) : "修改設定後自動保存；下次啟動恢復，不自動開始偵測");
+        persistenceStatus.ForeColor = error is not null
+            || configurationWarnings.Count > 0 ? Color.DarkRed : Color.DarkSlateGray;
         persistenceStatus.Text = notice;
         configurationPathStatus.Text = $"配置：{configurationStore.FilePath}";
-        if (workbenchTips.GetToolTip(persistenceStatus) != notice) workbenchTips.SetToolTip(persistenceStatus, notice);
-        string references = $"樣版：{templateFolder ?? "尚未載入"}\n流程：{appConfiguration.SkillFlowPath ?? "尚未匯入"}";
-        if (workbenchTips.GetToolTip(sourceStatus) != references) workbenchTips.SetToolTip(sourceStatus, references);
+        if (workbenchTips.GetToolTip(persistenceStatus) != notice)
+            workbenchTips.SetToolTip(persistenceStatus, notice);
+        string references =
+            $"樣版：{templateFolder ?? "尚未載入"}\n流程：{appConfiguration.SkillFlowPath ?? "尚未匯入"}";
+        if (workbenchTips.GetToolTip(sourceStatus) != references)
+            workbenchTips.SetToolTip(sourceStatus, references);
     }
 
-    private void ClearConfigurationWarnings(params string[] prefixes) => configurationWarnings.RemoveAll(warning => prefixes.Any(prefix => warning.StartsWith(prefix)));
+    /// <summary>
+    /// 移除指定前綴的配置警告，保留其他尚未解決的問題。
+    /// </summary>
+    private void ClearConfigurationWarnings(params string[] prefixes) =>
+        configurationWarnings.RemoveAll(warning => prefixes.Any(prefix => warning.StartsWith(
+        prefix)));
 
-    /// <summary>Does not queue anything on startup; only flushes edits already made by the user.</summary>
+    /// <summary>Does not queue anything on startup; only flushes edits already made by the
+    /// user.</summary>
     public string? FlushConfiguration()
     {
-        configurationStore.Flush(); RefreshPersistenceStatus();
+        configurationStore.Flush();
+        RefreshPersistenceStatus();
         return configurationStore.LastError;
     }
 }
