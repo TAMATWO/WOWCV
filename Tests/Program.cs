@@ -823,6 +823,13 @@ internal static class Program
         var preview = FindControls<RoiPictureBox>(detection).Single();
         var useRoi = FindControls<CheckBox>(detection).Single(control => control.Text == "僅偵測選取區");
         var selectRoi = FindControls<Button>(detection).Single(control => control.Text == "框選偵測範圍");
+        var locks = FindControls<Button>(detection)
+            .Where(button => button.AccessibleName == "解鎖此區設定").ToArray();
+        Check(locks.Length == 6 && !selectRoi.Enabled,
+            "Six settings groups start locked and block ROI actions");
+        foreach (var button in locks)
+            button.PerformClick();
+        Check(selectRoi.Enabled, "Unlocking restores ROI actions");
         var oldResult = (DetectionRow)table.Rows[0].Tag!;
         selectRoi.PerformClick();
         RoiViewportTests.Select(preview, new Rectangle(35, 25, 60, 60));

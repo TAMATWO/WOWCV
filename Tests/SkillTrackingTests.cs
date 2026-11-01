@@ -713,6 +713,9 @@ internal static class SkillTrackingTests
         update.Invoke(detection, [snapshot]);
         using (var image = Frame(template, flash: true))
             Cv2.ImWrite(source, image);
+        foreach (var button in Find<Button>(detection)
+            .Where(button => button.AccessibleName == "解鎖此區設定").ToArray())
+            button.PerformClick();
         Find<Button>(detection).Single(button => button.Text == "重新偵測").PerformClick();
         WaitFor(() => table.Rows.Count == 1
             && table.Rows[0].Tag is SkillObservation { Found: true });

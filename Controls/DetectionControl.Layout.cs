@@ -71,13 +71,6 @@ public sealed partial class DetectionControl
         settings.Controls.Add(stack);
         void Group(string title, params Control[] controls)
         {
-            var group = new GroupBox
-            {
-                Text = title,
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                Padding = new Padding(6, 8, 6, 8)
-            };
             var body = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
@@ -92,7 +85,13 @@ public sealed partial class DetectionControl
                 body.Controls.Add(control, 0, body.RowCount++);
             }
 
-            group.Controls.Add(body);
+            var group = new LockableSettingsGroup(title, body);
+            if (title == "偵測範圍")
+                group.Locked += (_, _) =>
+                {
+                    preview.SelectionEnabled = false;
+                    preview.Cursor = Cursors.Default;
+                };
             stack.Controls.Add(group, 0, stack.RowCount++);
         }
 
@@ -162,6 +161,7 @@ public sealed partial class DetectionControl
             pixelSettings.Visible = !pixelSettings.Visible;
             pixelToggle.Text = pixelSettings.Visible ? "收合五點設定" : "展開五點設定";
         };
+        pixelToggle.Tag = "LockView";
         Group("五點驗證", pixelSettings.VerificationToggle, pixelToggle, pixelSettings);
         var castingSettings = new TableLayoutPanel
         {
