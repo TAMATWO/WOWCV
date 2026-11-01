@@ -67,6 +67,8 @@ public sealed record SearchConfiguration
 {
     public double Threshold { get; init; } = 0.8;
     public double ProcessScale { get; init; } = 1;
+    public double MultiScaleMin { get; init; } = 0.8;
+    public double MultiScaleMax { get; init; } = 1.2;
     public bool MultiScale
     {
         get; init;
@@ -110,6 +112,7 @@ public sealed record WorkbenchConfiguration
             throw new ArgumentException("門檻必須為 0～1。");
         if (!double.IsFinite(Search.ProcessScale) || Search.ProcessScale is < 0.1 or > 1)
             throw new ArgumentException("處理倍率必須為 0.1～1。");
+        WOWCV.Services.TemplateMatchingService.ValidateScaleRange(Search.MultiScaleMin, Search.MultiScaleMax);
         Verification.Validate();
         Casting.Validate();
     }

@@ -35,9 +35,19 @@ public sealed partial class DetectionControl : UserControl
         Increment = 0.05m,
         Width = 65
     };
+    private readonly NumericUpDown multiScaleMin = new()
+    {
+        Name = "MultiScaleMin", Minimum = 0.1m, Maximum = 3,
+        DecimalPlaces = 2, Increment = 0.05m, Value = 0.8m, Width = 65, Enabled = false
+    };
+    private readonly NumericUpDown multiScaleMax = new()
+    {
+        Name = "MultiScaleMax", Minimum = 0.1m, Maximum = 3,
+        DecimalPlaces = 2, Increment = 0.05m, Value = 1.2m, Width = 65, Enabled = false
+    };
     private readonly CheckBox multiScale = new()
     {
-        Text = "多尺度 0.8～1.2",
+        Text = "多尺度",
         AutoSize = true
     };
     private readonly CheckBox useRoi = new()
@@ -201,7 +211,29 @@ public sealed partial class DetectionControl : UserControl
         };
         threshold.ValueChanged += (_, _) => Configure();
         processScale.ValueChanged += (_, _) => Configure();
-        multiScale.CheckedChanged += (_, _) => Configure();
+        multiScale.CheckedChanged += (_, _) =>
+        {
+            multiScaleMin.Enabled = multiScaleMax.Enabled = multiScale.Checked;
+            Configure();
+        };
+        multiScaleMin.ValueChanged += (_, _) =>
+        {
+            if (applyingConfiguration)
+                return;
+            if (multiScaleMax.Value < multiScaleMin.Value)
+                multiScaleMax.Value = multiScaleMin.Value;
+            else
+                Configure();
+        };
+        multiScaleMax.ValueChanged += (_, _) =>
+        {
+            if (applyingConfiguration)
+                return;
+            if (multiScaleMin.Value > multiScaleMax.Value)
+                multiScaleMin.Value = multiScaleMax.Value;
+            else
+                Configure();
+        };
         useRoi.CheckedChanged += (_, _) => Configure();
         preview.SelectionChanged += (_, _) =>
         {
@@ -324,7 +356,9 @@ public sealed partial class DetectionControl : UserControl
             pixelSettings.GetOptions(),
             Configuration.Bindings,
             trackingResetRevision,
-            imagePath ?? allScreens.ElementAtOrDefault(screens.SelectedIndex)?.DeviceName
+            imagePath ?? allScreens.ElementAtOrDefault(screens.SelectedIndex)?.DeviceName,
+            (double)multiScaleMin.Value,
+            (double)multiScaleMax.Value
         ));
         results.Rows.Clear();
         sampleDetails.Rows.Clear();

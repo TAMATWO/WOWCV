@@ -81,6 +81,8 @@ public sealed partial class DetectionControl
                 "樣版資料夾");
             threshold.Value = (decimal)appConfiguration.Search.Threshold;
             processScale.Value = (decimal)appConfiguration.Search.ProcessScale;
+            multiScaleMin.Value = (decimal)appConfiguration.Search.MultiScaleMin;
+            multiScaleMax.Value = (decimal)appConfiguration.Search.MultiScaleMax;
             multiScale.Checked = appConfiguration.Search.MultiScale;
             pixelSettings.ApplyOptions(appConfiguration.Verification);
             RestoreCastingOptions();
@@ -186,6 +188,8 @@ public sealed partial class DetectionControl
                 Threshold = (double)threshold.Value,
                 ProcessScale = (double)processScale.Value,
                 MultiScale = multiScale.Checked,
+                MultiScaleMin = (double)multiScaleMin.Value,
+                MultiScaleMax = (double)multiScaleMax.Value,
                 UseRoi = useRoi.Checked
             },
             Verification = pixelSettings.GetOptions(),
