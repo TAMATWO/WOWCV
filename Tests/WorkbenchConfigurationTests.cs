@@ -205,6 +205,9 @@ internal static class WorkbenchConfigurationTests
         using (var form = Host(path))
         {
             form.Show();
+            foreach (var button in Find<Button>(form)
+                .Where(button => button.AccessibleName == "解鎖此區設定"))
+                button.PerformClick();
             var detection = Find<DetectionControl>(form).Single();
             var preview = Find<RoiPictureBox>(detection).Single();
             WaitFor(() => preview.Image is not null);
@@ -281,6 +284,9 @@ internal static class WorkbenchConfigurationTests
         using (var form = Host(path))
         {
             form.Show();
+            foreach (var button in Find<Button>(form)
+                .Where(button => button.AccessibleName == "解鎖此區設定"))
+                button.PerformClick();
             var detection = Find<DetectionControl>(form).Single();
             var preview = Find<RoiPictureBox>(detection).Single();
             WaitFor(() => preview.Image is not null);
@@ -310,6 +316,9 @@ internal static class WorkbenchConfigurationTests
         using (var form = Host(path))
         {
             form.Show();
+            foreach (var button in Find<Button>(form)
+                .Where(button => button.AccessibleName == "解鎖此區設定"))
+                button.PerformClick();
             var detection = Find<DetectionControl>(form).Single();
             var preview = Find<RoiPictureBox>(detection).Single();
             WaitFor(() => preview.Image is not null);
@@ -347,6 +356,9 @@ internal static class WorkbenchConfigurationTests
         using (var form = Host(path))
         {
             form.Show();
+            foreach (var button in Find<Button>(form)
+                .Where(button => button.AccessibleName == "解鎖此區設定"))
+                button.PerformClick();
             var detection = Find<DetectionControl>(form).Single();
             check(
                 !Find<CheckBox>(detection).Single(control => control.Text == "僅偵測選取區").Checked
@@ -395,6 +407,9 @@ internal static class WorkbenchConfigurationTests
             );
             using var form = Host(mismatch);
             form.Show();
+            foreach (var button in Find<Button>(form)
+                .Where(button => button.AccessibleName == "解鎖此區設定"))
+                button.PerformClick();
             var detection = Find<DetectionControl>(form).Single();
             check(
                 Find<RoiPictureBox>(detection).Single().Selection is null
@@ -410,6 +425,9 @@ internal static class WorkbenchConfigurationTests
         using (var form = Host(broken))
         {
             form.Show();
+            foreach (var button in Find<Button>(form)
+                .Where(button => button.AccessibleName == "解鎖此區設定"))
+                button.PerformClick();
             var detection = Find<DetectionControl>(form).Single();
             check(
                 detection.ConfigurationNotice.Contains("使用預設值"),

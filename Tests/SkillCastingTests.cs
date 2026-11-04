@@ -807,6 +807,9 @@ internal static class SkillCastingTests
                 !enable.Checked && notice.Text.Contains("螢幕來源") && output.Events.IsEmpty,
                 "Static-image detection cannot enable actual casting"
             );
+            foreach (var button in Find<Button>(detection)
+                .Where(button => button.AccessibleName == "解鎖此區設定").ToArray())
+                button.PerformClick();
             Find<Button>(detection).Single(button => button.Text == "切換螢幕來源").PerformClick();
             enable.Checked = true;
             check(

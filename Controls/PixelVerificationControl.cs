@@ -128,6 +128,7 @@ public sealed class PixelVerificationControl : UserControl
             AutoSize = true
         };
         load.Click += (_, _) => Import();
+        save.Tag = "LockView";
         save.Click += (_, _) => Export();
         buttons.Controls.AddRange([load, save]);
         AddWide(buttons, 9);

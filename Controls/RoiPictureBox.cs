@@ -193,6 +193,7 @@ public sealed partial class RoiPictureBox : PictureBox
     {
         base.OnMouseMove(e);
         UpdateMagnifier(e.Location);
+        UpdateLegendTip(e.Location);
         if (anchor is not { } start || Image is null)
             return;
         var end = ToImage(e.Location);
@@ -251,6 +252,7 @@ public sealed partial class RoiPictureBox : PictureBox
         if (Image is null || bounds.IsEmpty)
         {
             base.OnPaint(pe);
+            DrawLegend(pe.Graphics);
             return;
         }
 
@@ -323,6 +325,7 @@ public sealed partial class RoiPictureBox : PictureBox
 
         pe.Graphics.Restore(overlayState);
         DrawMagnifier(pe.Graphics);
+        DrawLegend(pe.Graphics);
     }
 
     /// <summary>
@@ -332,6 +335,8 @@ public sealed partial class RoiPictureBox : PictureBox
     {
         if (disposing)
         {
+            legendTip?.Dispose();
+            legendTip = null;
             var previous = Image;
             Image = null;
             previous?.Dispose();

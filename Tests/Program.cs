@@ -14,7 +14,7 @@ internal static class Program
     /// 執行全部隔離驗證並回報成功項數與產物位置。
     /// </summary>
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
         Cv2.SetNumThreads(1);
@@ -24,6 +24,12 @@ internal static class Program
         Directory.CreateDirectory(root);
         try
         {
+            if (args.Contains("--theme-only"))
+            {
+                UiThemeTests.Run(root, Check);
+                Console.WriteLine($"PASS: {checks} checks. Artifacts: {root}");
+                return 0;
+            }
             TestConfiguration();
             TestSlicing(root);
             TestMatching(root);
@@ -35,6 +41,7 @@ internal static class Program
             MagnifierTests.Run(root, Check);
             WorkbenchConfigurationTests.Run(root, Check);
             TestTabs(root);
+            UiThemeTests.Run(root, Check);
             TestPixelResultsUi(root);
             SkillTrackingTests.Run(root, Check);
             SkillEditorDeletionTests.Run(root, Check);
@@ -823,6 +830,13 @@ internal static class Program
         var preview = FindControls<RoiPictureBox>(detection).Single();
         var useRoi = FindControls<CheckBox>(detection).Single(control => control.Text == "僅偵測選取區");
         var selectRoi = FindControls<Button>(detection).Single(control => control.Text == "框選偵測範圍");
+        var locks = FindControls<Button>(detection)
+            .Where(button => button.AccessibleName == "解鎖此區設定").ToArray();
+        Check(locks.Length == 6 && !selectRoi.Enabled,
+            "Six settings groups start locked and block ROI actions");
+        foreach (var button in locks)
+            button.PerformClick();
+        Check(selectRoi.Enabled, "Unlocking restores ROI actions");
         var oldResult = (DetectionRow)table.Rows[0].Tag!;
         selectRoi.PerformClick();
         RoiViewportTests.Select(preview, new Rectangle(35, 25, 60, 60));

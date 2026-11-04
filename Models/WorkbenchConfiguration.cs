@@ -67,6 +67,8 @@ public sealed record SearchConfiguration
 {
     public double Threshold { get; init; } = 0.8;
     public double ProcessScale { get; init; } = 1;
+    public double MultiScaleMin { get; init; } = 0.8;
+    public double MultiScaleMax { get; init; } = 1.2;
     public bool MultiScale
     {
         get; init;
@@ -86,6 +88,7 @@ public sealed record SearchConfiguration
 public sealed record WorkbenchConfiguration
 {
     public int Version { get; init; } = 1;
+    public UiTheme Theme { get; init; } = UiTheme.Light;
     public SourceConfiguration Source { get; init; } = new();
     public SearchConfiguration Search { get; init; } = new();
     public PixelVerificationOptions Verification { get; init; } = new();
@@ -102,6 +105,8 @@ public sealed record WorkbenchConfiguration
     {
         if (Version != 1)
             throw new ArgumentException("不支援的配置版本，需要 version=1。");
+        if (!Enum.IsDefined(Theme))
+            throw new ArgumentException("無效的介面主題。");
         if (Source is null || Search is null || Verification is null || Casting is null)
             throw new ArgumentException("配置分類不可為 null。");
         if (!Enum.IsDefined(Source.Kind))
@@ -110,6 +115,7 @@ public sealed record WorkbenchConfiguration
             throw new ArgumentException("門檻必須為 0～1。");
         if (!double.IsFinite(Search.ProcessScale) || Search.ProcessScale is < 0.1 or > 1)
             throw new ArgumentException("處理倍率必須為 0.1～1。");
+        WOWCV.Services.TemplateMatchingService.ValidateScaleRange(Search.MultiScaleMin, Search.MultiScaleMax);
         Verification.Validate();
         Casting.Validate();
     }

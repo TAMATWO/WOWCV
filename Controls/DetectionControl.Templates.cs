@@ -36,6 +36,30 @@ public sealed partial class DetectionControl
         table.Columns["樣版"]!.Width = 135;
         table.RowTemplate.Height = Math.Max(22, table.Font.Height + 6);
         table.ShowCellToolTips = true;
+        table.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.False;
+        table.ColumnHeadersHeightSizeMode =
+            DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+        table.HandleCreated += (_, _) => FitResultHeaders(table);
+        table.FontChanged += (_, _) => FitResultHeaders(table);
+        table.DpiChangedAfterParent += (_, _) => FitResultHeaders(table);
+        FitResultHeaders(table);
+    }
+
+    /// <summary>依標題字體預留單行欄寬與列高，避免文字裁切。</summary>
+    private static void FitResultHeaders(DataGridView table)
+    {
+        Font font = table.ColumnHeadersDefaultCellStyle.Font ?? table.Font;
+        int spacing = (int)Math.Ceiling(18 * table.DeviceDpi / 96.0);
+        foreach (DataGridViewColumn column in table.Columns)
+        {
+            Font headerFont = column.HeaderCell.Style.Font ?? font;
+            int width = TextRenderer.MeasureText(
+                column.HeaderText, headerFont, Size.Empty,
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix).Width;
+            column.MinimumWidth = Math.Max(2, width + spacing);
+            column.Width = Math.Max(column.Width, column.MinimumWidth);
+        }
+        table.AutoResizeColumnHeadersHeight();
     }
 
     /// <summary>

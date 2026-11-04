@@ -21,6 +21,17 @@ public sealed partial class DetectionControl
     };
     public string ConfigurationFilePath => configurationStore.FilePath;
     public string ConfigurationNotice => persistenceStatus.Text;
+    public UiTheme SelectedTheme => appConfiguration.Theme;
+
+    /// <summary>只保存外觀偏好，不更新辨識版本或施放上下文。</summary>
+    public void SaveTheme(UiTheme theme)
+    {
+        if (!Enum.IsDefined(theme))
+            throw new ArgumentOutOfRangeException(nameof(theme));
+        appConfiguration = appConfiguration with { Theme = theme };
+        configurationStore.QueueSave(appConfiguration);
+        RefreshPersistenceStatus();
+    }
 
     /// <summary>
     /// 還原來源、辨識與流程設定；失效參照保留警告，啟動時不自動偵測或施放。
@@ -81,6 +92,8 @@ public sealed partial class DetectionControl
                 "樣版資料夾");
             threshold.Value = (decimal)appConfiguration.Search.Threshold;
             processScale.Value = (decimal)appConfiguration.Search.ProcessScale;
+            multiScaleMin.Value = (decimal)appConfiguration.Search.MultiScaleMin;
+            multiScaleMax.Value = (decimal)appConfiguration.Search.MultiScaleMax;
             multiScale.Checked = appConfiguration.Search.MultiScale;
             pixelSettings.ApplyOptions(appConfiguration.Verification);
             RestoreCastingOptions();
@@ -186,6 +199,8 @@ public sealed partial class DetectionControl
                 Threshold = (double)threshold.Value,
                 ProcessScale = (double)processScale.Value,
                 MultiScale = multiScale.Checked,
+                MultiScaleMin = (double)multiScaleMin.Value,
+                MultiScaleMax = (double)multiScaleMax.Value,
                 UseRoi = useRoi.Checked
             },
             Verification = pixelSettings.GetOptions(),

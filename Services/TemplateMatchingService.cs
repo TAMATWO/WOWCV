@@ -10,7 +10,7 @@ public sealed record DetectionSettings(long Version, Rectangle ScreenBounds, str
     bool MultiScale = false, bool Detecting = false, Rectangle? Roi = null,
     int TemplateRevision = 0, PixelVerificationOptions? PixelVerification = null,
     SkillBindingSnapshot? SkillBindings = null, long TrackingResetRevision = 0,
-    string? SourceIdentity = null);
+    string? SourceIdentity = null, double MultiScaleMin = 0.8, double MultiScaleMax = 1.2);
 public sealed record DetectionRow(string Template, bool Found, double Similarity,
     double Difference, double Scale, int X, int Y, int Width, int Height, double Mse,
     bool CandidatePassed, PixelVerificationResult PixelVerification, Rectangle Bounds,
@@ -20,10 +20,18 @@ public sealed record DetectionRow(string Template, bool Found, double Similarity
 /// service.</summary>
 public sealed class TemplateMatchingService : IDisposable
 {
+    /// <summary>驗證多尺度搜尋範圍。</summary>
+    public static void ValidateScaleRange(double min, double max)
+    {
+        if (!double.IsFinite(min) || !double.IsFinite(max)
+            || min < 0.1 || max > 3 || min > max)
+            throw new ArgumentException("多尺度倍率需介於 0.10～3.00，且最小值不可大於最大值。");
+    }
+
     private sealed record Variant(double Scale, Mat Image);
     private sealed record Template(string Name, Mat Color, Mat Gray, List<Variant> Variants);
     private readonly List<Template> templates = [];
-    private (string?, double, bool, int)? cacheKey;
+    private (string?, double, bool, int, double, double)? cacheKey;
     public string TemplateStatus { get; private set; } = "尚未載入樣版";
 
     /// <summary>
@@ -32,7 +40,7 @@ public sealed class TemplateMatchingService : IDisposable
     private void Prepare(DetectionSettings settings, CancellationToken token)
     {
         var key = (settings.TemplateFolder, settings.ProcessScale, settings.MultiScale,
-            settings.TemplateRevision);
+            settings.TemplateRevision, settings.MultiScaleMin, settings.MultiScaleMax);
         if (cacheKey == key)
             return;
         Clear();
@@ -75,9 +83,15 @@ public sealed class TemplateMatchingService : IDisposable
                 templates.Add(new(Path.GetFileName(path), color.Clone(), image.Clone(), variants));
                 Add(1);
                 if (settings.MultiScale)
-                    for (int i = 16; i <= 24; i++)
-                        if (i != 20)
-                            Add(i / 20.0);
+                {
+                    decimal min = (decimal)settings.MultiScaleMin;
+                    decimal max = (decimal)settings.MultiScaleMax;
+                    for (decimal scale = min; scale < max; scale += 0.05m)
+                        if (scale != 1)
+                            Add((double)scale);
+                    if (max != 1)
+                        Add((double)max);
+                }
                 void Add(double scale)
                 {
                     var resized = new Mat();
@@ -124,6 +138,7 @@ public sealed class TemplateMatchingService : IDisposable
         if (settings.ProcessScale is < 0.1 or > 1 || !double.IsFinite(settings.ProcessScale)
             || settings.Threshold is < 0 or > 1 || !double.IsFinite(settings.Threshold))
             throw new ArgumentException("處理倍率需為 0.1～1；門檻需為 0～1。");
+        ValidateScaleRange(settings.MultiScaleMin, settings.MultiScaleMax);
         var pixelOptions = settings.PixelVerification ?? new PixelVerificationOptions();
         pixelOptions.Validate();
         Prepare(settings, token);

@@ -71,13 +71,6 @@ public sealed partial class DetectionControl
         settings.Controls.Add(stack);
         void Group(string title, params Control[] controls)
         {
-            var group = new GroupBox
-            {
-                Text = title,
-                Dock = DockStyle.Top,
-                AutoSize = true,
-                Padding = new Padding(6, 8, 6, 8)
-            };
             var body = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
@@ -92,7 +85,13 @@ public sealed partial class DetectionControl
                 body.Controls.Add(control, 0, body.RowCount++);
             }
 
-            group.Controls.Add(body);
+            var group = new LockableSettingsGroup(title, body);
+            if (title == "偵測範圍")
+                group.Locked += (_, _) =>
+                {
+                    preview.SelectionEnabled = false;
+                    preview.Cursor = Cursors.Default;
+                };
             stack.Controls.Add(group, 0, stack.RowCount++);
         }
 
@@ -108,11 +107,32 @@ public sealed partial class DetectionControl
             ActionButton("匯入 TXT / JSON 暫存", ImportConfiguration),
             sourceStatus
         );
+        var scaleRange = new TableLayoutPanel
+        {
+            AutoSize = true,
+            ColumnCount = 2,
+            RowCount = 1
+        };
+        scaleRange.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        scaleRange.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        scaleRange.Controls.Add(SettingField("最小", multiScaleMin), 0, 0);
+        scaleRange.Controls.Add(SettingField("最大", multiScaleMax), 1, 0);
+        workbenchTips.SetToolTip(processScale,
+            "對畫面來源（螢幕擷取或載入圖片）及所有模板同步縮放。"
+            + "1 表示維持原尺寸；0.5 表示寬高各減半，以減少運算量，"
+            + "不改變模板相對於畫面的大小。");
+        const string scaleTip = "適用於載入模板資料夾內的所有圖片。"
+            + "先比對原尺寸，未達門檻時，再將各模板依設定範圍放大縮小後搜尋；"
+            + "不改變畫面來源尺寸。";
+        workbenchTips.SetToolTip(multiScale, scaleTip);
+        workbenchTips.SetToolTip(multiScaleMin, scaleTip);
+        workbenchTips.SetToolTip(multiScaleMax, scaleTip);
         Group(
             "辨識參數",
             SettingField("門檻", threshold),
             SettingField("處理倍率", processScale),
             multiScale,
+            scaleRange,
             ActionButton("重新偵測", Configure)
         );
         Group(
@@ -141,6 +161,7 @@ public sealed partial class DetectionControl
             pixelSettings.Visible = !pixelSettings.Visible;
             pixelToggle.Text = pixelSettings.Visible ? "收合五點設定" : "展開五點設定";
         };
+        pixelToggle.Tag = "LockView";
         Group("五點驗證", pixelSettings.VerificationToggle, pixelToggle, pixelSettings);
         var castingSettings = new TableLayoutPanel
         {
@@ -166,7 +187,7 @@ public sealed partial class DetectionControl
             Panel2MinSize = 310
         };
         split.Panel1.Controls.Add(preview);
-        var right = new TabControl
+        var right = new ThemeTabControl
         {
             Dock = DockStyle.Fill
         };

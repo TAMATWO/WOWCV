@@ -9,7 +9,13 @@ public sealed partial class DetectionControl
     private readonly CheckBox castingEnabled = new()
     {
         Name = "CastingEnabled",
-        Text = "啟用技能施放",
+        Text = "技能施放：關閉",
+        Appearance = Appearance.Button,
+        FlatStyle = FlatStyle.Flat,
+        Padding = Padding.Empty,
+        MinimumSize = new Size(125, 24),
+        TextAlign = ContentAlignment.MiddleCenter,
+        UseVisualStyleBackColor = false,
         AutoSize = true
     };
     private readonly ComboBox triggerMode = new()
@@ -48,6 +54,10 @@ public sealed partial class DetectionControl
     /// </summary>
     private void InitializeCastingControls(TableLayoutPanel host)
     {
+        castingEnabled.FlatAppearance.BorderSize = 1;
+        castingEnabled.FlatAppearance.BorderColor = Color.Silver;
+        castingEnabled.FlatAppearance.MouseOverBackColor = Color.FromArgb(232, 240, 236);
+        castingEnabled.FlatAppearance.MouseDownBackColor = Color.FromArgb(210, 228, 216);
         triggerMode.Items.AddRange(["按住（後按生效）", "切換啟動／停止"]);
         triggerMode.SelectedIndex = 0;
         host.Controls.Add(SettingField("觸發模式", triggerMode));
@@ -145,6 +155,12 @@ public sealed partial class DetectionControl
         try
         {
             castingEnabled.Checked = value.Enabled;
+            castingEnabled.Text = value.Enabled ? "技能施放：已啟用" : "技能施放：關閉";
+            castingEnabled.BackColor = value.Enabled
+                ? Color.FromArgb(220, 240, 226) : Color.FromArgb(250, 250, 250);
+            castingEnabled.FlatAppearance.CheckedBackColor = Color.FromArgb(220, 240, 226);
+            castingEnabled.ForeColor = value.Enabled
+                ? Color.FromArgb(28, 100, 52) : SystemColors.ControlText;
         }
         finally
         {

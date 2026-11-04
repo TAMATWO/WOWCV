@@ -66,6 +66,7 @@ public sealed partial class RoiPictureBox
     protected override void OnMouseLeave(EventArgs e)
     {
         base.OnMouseLeave(e);
+        ClearLegendTip();
         ResetMagnifier();
     }
 
@@ -75,6 +76,7 @@ public sealed partial class RoiPictureBox
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
+        ClearLegendTip();
         ResetMagnifier();
     }
 
