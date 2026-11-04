@@ -36,6 +36,7 @@ internal sealed class LockableSettingsGroup : GroupBox
                 Locked?.Invoke(this, EventArgs.Empty);
         };
         Controls.Add(lockButton);
+        ForeColorChanged += (_, _) => UpdateIcon();
         UpdateLock();
     }
 
@@ -97,7 +98,7 @@ internal sealed class LockableSettingsGroup : GroupBox
         int size = Math.Max(16, (int)Math.Round(16 * DeviceDpi / 96.0));
         var icon = new Bitmap(size, size);
         using (var graphics = Graphics.FromImage(icon))
-        using (var pen = new Pen(Color.FromArgb(64, 64, 64), 1.8f))
+        using (var pen = new Pen(ForeColor, 1.8f))
         {
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
             graphics.ScaleTransform(size / 24f, size / 24f);

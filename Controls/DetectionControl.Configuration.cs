@@ -21,6 +21,17 @@ public sealed partial class DetectionControl
     };
     public string ConfigurationFilePath => configurationStore.FilePath;
     public string ConfigurationNotice => persistenceStatus.Text;
+    public UiTheme SelectedTheme => appConfiguration.Theme;
+
+    /// <summary>只保存外觀偏好，不更新辨識版本或施放上下文。</summary>
+    public void SaveTheme(UiTheme theme)
+    {
+        if (!Enum.IsDefined(theme))
+            throw new ArgumentOutOfRangeException(nameof(theme));
+        appConfiguration = appConfiguration with { Theme = theme };
+        configurationStore.QueueSave(appConfiguration);
+        RefreshPersistenceStatus();
+    }
 
     /// <summary>
     /// 還原來源、辨識與流程設定；失效參照保留警告，啟動時不自動偵測或施放。

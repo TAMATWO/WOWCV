@@ -187,7 +187,7 @@ public sealed partial class DetectionControl
             Panel2MinSize = 310
         };
         split.Panel1.Controls.Add(preview);
-        var right = new TabControl
+        var right = new ThemeTabControl
         {
             Dock = DockStyle.Fill
         };

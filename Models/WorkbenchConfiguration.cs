@@ -88,6 +88,7 @@ public sealed record SearchConfiguration
 public sealed record WorkbenchConfiguration
 {
     public int Version { get; init; } = 1;
+    public UiTheme Theme { get; init; } = UiTheme.Light;
     public SourceConfiguration Source { get; init; } = new();
     public SearchConfiguration Search { get; init; } = new();
     public PixelVerificationOptions Verification { get; init; } = new();
@@ -104,6 +105,8 @@ public sealed record WorkbenchConfiguration
     {
         if (Version != 1)
             throw new ArgumentException("不支援的配置版本，需要 version=1。");
+        if (!Enum.IsDefined(Theme))
+            throw new ArgumentException("無效的介面主題。");
         if (Source is null || Search is null || Verification is null || Casting is null)
             throw new ArgumentException("配置分類不可為 null。");
         if (!Enum.IsDefined(Source.Kind))

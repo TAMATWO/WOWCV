@@ -9,7 +9,7 @@ public sealed partial class DetectionControl : UserControl
     private readonly RawInputService input = new();
     public RuntimeConfiguration Configuration { get; } = new();
 
-    private readonly RoiPictureBox preview = new();
+    private readonly RoiPictureBox preview = new() { LegendEnabled = true };
     private readonly PixelVerificationControl pixelSettings = new();
     private readonly ComboBox screens = new()
     {

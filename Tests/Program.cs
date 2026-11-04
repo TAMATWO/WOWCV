@@ -14,7 +14,7 @@ internal static class Program
     /// 執行全部隔離驗證並回報成功項數與產物位置。
     /// </summary>
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
         Cv2.SetNumThreads(1);
@@ -24,6 +24,12 @@ internal static class Program
         Directory.CreateDirectory(root);
         try
         {
+            if (args.Contains("--theme-only"))
+            {
+                UiThemeTests.Run(root, Check);
+                Console.WriteLine($"PASS: {checks} checks. Artifacts: {root}");
+                return 0;
+            }
             TestConfiguration();
             TestSlicing(root);
             TestMatching(root);
@@ -35,6 +41,7 @@ internal static class Program
             MagnifierTests.Run(root, Check);
             WorkbenchConfigurationTests.Run(root, Check);
             TestTabs(root);
+            UiThemeTests.Run(root, Check);
             TestPixelResultsUi(root);
             SkillTrackingTests.Run(root, Check);
             SkillEditorDeletionTests.Run(root, Check);
